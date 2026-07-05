@@ -294,3 +294,45 @@ secrets.properties
 .DS_Store
 Thumbs.db
 
+
+
+# Environment files (keep example templates in Git)
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Secrets and certificates
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+
+# Temporary, cache, and backup files
+*.tmp
+*.temp
+*.cache
+*.bak
+*.backup
+*.orig
+*~
+.cache/
+.vite/
+.parcel-cache/
+.turbo/
+
+# Test reports
+test-results/
+playwright-report/
+blob-report/
+
+# Packaged archives
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.rar
+*.7z
+
