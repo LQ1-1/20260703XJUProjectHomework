@@ -336,3 +336,6 @@ blob-report/
 *.rar
 *.7z
 
+
+*.glb
+
