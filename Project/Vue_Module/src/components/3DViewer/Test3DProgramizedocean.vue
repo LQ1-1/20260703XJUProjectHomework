@@ -3,30 +3,21 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
-import oceanUrl from '../../model/ocean.glb?url'
+import UnderwaterStatusPanel from './UnderwaterStatusPanel.vue'
 import submarineUrl from '../../model/type_vii_d_u-boat.glb?url'
-
-// 单个海洋区块的数据。每个区块共用模型资源，但拥有独立的位置和动画播放器。
-type OceanTile = {
-  root: THREE.Object3D // 区块的模型根节点
-  mixer?: THREE.AnimationMixer // 负责播放这个区块的海浪动画
-  meshes: THREE.Mesh[] // 射线检测需要使用的海面网格
-  gridX: number // 区块在海洋网格中的 X 编号
-  gridZ: number // 区块在海洋网格中的 Z 编号
-}
+import periscopeSightUrl from '../../assets/Uboot Periscope sight/UBootPeriscopeAimingSight.png?url'
 
 // -------------------- 现实单位和场景单位换算 --------------------
 // 潜艇模型在 Three.js 中缩放为 22 单位，对应现实中的约 77 米。
-const MODEL_LENGTH_SCENE = 22
-const MODEL_LENGTH_METERS = 77
+const MODEL_LENGTH_SCENE = 22     //缩放成为22个单位
+const MODEL_LENGTH_METERS = 77    //Type VII D型潜艇全长76.9m
 const METERS_TO_SCENE = MODEL_LENGTH_SCENE / MODEL_LENGTH_METERS
 const SCENE_TO_METERS = MODEL_LENGTH_METERS / MODEL_LENGTH_SCENE
 
-// -------------------- 海洋、速度和深度参数 --------------------
-const OCEAN_TILE_SIZE = 400 // 每块海洋模型的水平尺寸为 400 × 400
-const OCEAN_TILE_SPACING = 398 // 相邻块搭接 2 单位，用来遮挡模型边缘裂缝
-const OCEAN_ANIMATION_SPEED = 0.75 // 海浪动画播放速度，1 为模型原速
-const SURFACE_MODEL_OFFSET = -0.02 // 用户指定的潜艇水面标准吃水偏移
+// -------------------- 程序化海洋、速度和深度参数 --------------------
+const OCEAN_SIZE = 1200 // 一张连续海面覆盖 1200 × 1200 场景单位
+const OCEAN_SEGMENTS = 256 // 网格细分；波浪顶点由 GPU 并行计算
+const SURFACE_MODEL_OFFSET = -0.01 // 用户指定的潜艇水面标准吃水偏移
 const MAX_DEPTH_SCENE = 280 * METERS_TO_SCENE // 最大潜深 280 米，等于 80 场景单位
 const MAX_VERTICAL_SPEED = 4 * METERS_TO_SCENE // 最大上浮/下潜速度：现实 4 米/秒
 const SURFACE_MAX_SPEED = (30_000 * METERS_TO_SCENE) / 3600 // 水面 30 km/h
@@ -34,10 +25,24 @@ const SUBMERGED_MAX_SPEED = (13_000 * METERS_TO_SCENE) / 3600 // 水下 13 km/h
 const REVERSE_SPEED_RATIO = 0.4 // 倒车最高速度是对应前进速度的 40%
 const MAX_TURN_RATE = THREE.MathUtils.degToRad(4) // 满速满舵每秒最多转向 4°
 const SPEED_TRANSITION_DEPTH = 15 * METERS_TO_SCENE // 前 15 米内平滑切换水面/水下限速
-const WATER_RAY_HEIGHT = 30 // 射线固定从基准海面上方 30 单位向下发射
-const CONTROL_CODES = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyK', 'KeyL'])
+const UNDERWATER_UI_DEPTH_METERS = 6  //控制UnderWaterStatusPanel显示的深度指标
+const MAX_SUBMARINE_PITCH = THREE.MathUtils.degToRad(25)  //控制潜艇上浮或者下潜的抬头或低头的幅度
+
+//潜望镜相关变量
+const PERISCOPE_MIN_DEPTH_METERS = 13   //设置潜望镜深度13~15m
+const PERISCOPE_MAX_DEPTH_METERS = 15
+const PERISCOPE_EYE_HEIGHT = 1.05 // 潜望镜镜头略高于当前海面
+const PERISCOPE_LOOK_DISTANCE = 200
+const PERISCOPE_MOUSE_SENSITIVITY = 0.004 //潜望镜视角的鼠标灵敏度
+const CONTROL_CODES = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyK', 'KeyL', 'KeyQ'])   //控制按键
 const SURFACE_BACKGROUND = new THREE.Color(0x061522)
 const DEEP_BACKGROUND = new THREE.Color(0x00121d)
+
+//波浪振幅
+const PRIMARY_SWELL=0.88
+const CROSS_SWELL=0.64
+const MEDIUM_CHOPPY_WAVES=0.24;
+const LIGHT_RIPPLES=0.17
 
 // -------------------- Vue 页面状态 --------------------
 const viewer = ref<HTMLDivElement | null>(null) // Three.js Canvas 的 HTML 容器
@@ -50,21 +55,21 @@ const depthMeters = ref(0) // HUD：当前深度，单位 m
 const headingDegrees = ref(0) // HUD：当前航向角，范围 0～359°
 const navigationState = ref<'水面' | '水下'>('水面')
 const limitNotice = ref('') // 到达水面或最大潜深时的提示
+const isPeriscopeActive = ref(false)
 
 const loadingLabel = computed(() => `${Math.round(loadingProgress.value)}%`)
+const speedKnots = computed(() => speedKmh.value / 1.852)
+const isSubmerged = computed(() => depthMeters.value > 0)
+const showUnderwaterStatus = computed(
+  () => depthMeters.value > UNDERWATER_UI_DEPTH_METERS && !isPeriscopeActive.value,
+)
 
 // -------------------- 可复用的数学对象和资源集合 --------------------
-// 这些对象会在每一帧反复使用，提前创建可以减少垃圾回收。
-const raycaster = new THREE.Raycaster()
-const rayOrigin = new THREE.Vector3()
-const downDirection = new THREE.Vector3(0, -1, 0)
 const movementDelta = new THREE.Vector3()
 const previousSubmarinePosition = new THREE.Vector3()
-const oceanBasePosition = new THREE.Vector3()
 const pressedKeys = new Set<string>()
 const resources: THREE.Object3D[] = []
 const fileProgress = new Map<string, { loaded: number; total: number }>()
-const oceanTiles: OceanTile[] = []
 
 // -------------------- Three.js 核心对象 --------------------
 let renderer: THREE.WebGLRenderer | undefined // 将 3D 场景绘制到 Canvas
@@ -72,7 +77,8 @@ let scene: THREE.Scene | undefined // 整个 3D 世界
 let camera: THREE.PerspectiveCamera | undefined // 玩家观察场景的透视相机
 let controls: OrbitControls | undefined // 鼠标旋转和缩放控制器
 let submarineRoot: THREE.Group | undefined // 负责潜艇移动、转向的根节点
-let oceanTemplate: THREE.Object3D | undefined // 首次加载的海洋模板
+let submarineVisual: THREE.Object3D | undefined // 只负责模型自身视觉姿态，例如上浮/下潜俯仰
+let proceduralOcean: THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMaterial> | undefined
 let resizeObserver: ResizeObserver | undefined
 let hemisphereLight: THREE.HemisphereLight | undefined
 let keyLight: THREE.DirectionalLight | undefined
@@ -83,20 +89,21 @@ let animationFrame = 0
 let hintTimer: ReturnType<typeof setTimeout> | undefined
 let noticeTimer: ReturnType<typeof setTimeout> | undefined
 let previousFrameTime = 0
-let lastWaterSampleTime = 0
 let lastHudUpdateTime = 0
-let currentGridX = Number.NaN
-let currentGridZ = Number.NaN
 let currentSpeed = 0 // 有符号速度：正数前进，负数倒车
 let heading = 0 // 航向弧度；潜艇初始朝向模型自身的 +X
 let targetDepth = 0 // K/L 修改的目标深度
 let currentDepth = 0 // 经过平滑运动后的实际深度
 let verticalSpeed = 0 // 当前垂直速度，用于平滑启动和停止
-let sampledWaterHeight = 0 // 射线检测到的潜艇当前位置海面高度
+let sampledWaterHeight = 0 // 与 GPU 相同的公式计算出的潜艇当前位置海面高度
+let oceanTime = 0 // 程序化海洋从启动后累计的运行时间（秒）
 let surfaceLimitWasActive = false
 let depthLimitWasActive = false
+let periscopeYaw = 0
+let isDraggingPeriscope = false
+let lastPeriscopePointerX = 0
 
-// 分别记录 ocean.glb 和 submarine.glb 的已加载字节，计算综合进度。
+// 程序化海洋无需下载，这里只记录潜艇 GLB 的下载进度。
 function updateLoadingProgress(url: string, event: ProgressEvent<EventTarget>) {
   fileProgress.set(url, {
     loaded: event.loaded,
@@ -116,133 +123,154 @@ function updateLoadingProgress(url: string, event: ProgressEvent<EventTarget>) {
   }
 }
 
-// 将下载来的海洋模型调整为 400 × 400，并把初始最高点对齐到 y = 0。
-function normalizeOcean(ocean: THREE.Object3D) {
-  const box = new THREE.Box3().setFromObject(ocean)
-  const size = box.getSize(new THREE.Vector3())
-
-  // 只放大水平 X/Z，避免把波浪高度也扩大。
-  if (size.x > 0) ocean.scale.x *= OCEAN_TILE_SIZE / size.x
-  if (size.z > 0) ocean.scale.z *= OCEAN_TILE_SIZE / size.z
-
-  const normalizedBox = new THREE.Box3().setFromObject(ocean)
-  const center = normalizedBox.getCenter(new THREE.Vector3())
-  ocean.position.x -= center.x
-  ocean.position.z -= center.z
-  ocean.position.y -= normalizedBox.max.y
-  ocean.updateMatrixWorld(true)
+// CPU 与 GPU 必须使用完全相同的波浪公式。
+// GPU 用它改变整张海面的顶点；CPU 用它计算潜艇当前位置的水面高度。
+function proceduralWaveHeight(x: number, z: number, time: number) {
+  return (
+    Math.sin(x * 0.075 + time * 0.85) * PRIMARY_SWELL +
+    Math.sin(z * 0.095 + time * 0.68) * CROSS_SWELL +
+    Math.sin((x + z) * 0.14 + time * 1.1) * MEDIUM_CHOPPY_WAVES +
+    Math.sin(x * 0.32 - z * 0.27 + time * 1.8) * LIGHT_RIPPLES
+  )
 }
 
-// 原模型使用的旧材质扩展不能被当前 Three.js 完整识别，因此主动设置现代 PBR 参数。
-function tuneOceanMaterials(ocean: THREE.Object3D) {
-  ocean.traverse((child) => {
-    if (!(child instanceof THREE.Mesh)) return
-    const materials = Array.isArray(child.material) ? child.material : [child.material]
-    for (const material of materials) {
-      if (!(material instanceof THREE.MeshStandardMaterial)) continue
-      material.color.set(0x17688a)
-      material.roughness = 0.32
-      material.metalness = 0.03
-      material.envMapIntensity = 0.7
-      material.needsUpdate = true
-    }
+// 创建一张连续的大型平面。波浪计算全部在显卡的顶点着色器中完成，
+// 因此不存在多个 GLB 模型拼接时的边缘高度和法线不一致问题。
+function createProceduralOcean() {
+  const geometry = new THREE.PlaneGeometry(
+    OCEAN_SIZE,
+    OCEAN_SIZE,
+    OCEAN_SEGMENTS,
+    OCEAN_SEGMENTS,
+  )
+  geometry.rotateX(-Math.PI / 2)
+
+  const material = new THREE.ShaderMaterial({
+    fog: true,
+    side: THREE.DoubleSide,
+    // ShaderMaterial 不会自动创建 fogColor/fogDensity。
+    // 必须合并 UniformsLib.fog，否则渲染器更新雾参数时会读取 undefined.value。
+    uniforms: THREE.UniformsUtils.merge([
+      THREE.UniformsLib.fog,
+      {
+        uTime: { value: 0 },
+        uDeepColor: { value: new THREE.Color(0x001f36) },
+        uShallowColor: { value: new THREE.Color(0x08799c) },
+        uSunColor: { value: new THREE.Color(0xd9f3ff) },
+        uSunDirection: { value: new THREE.Vector3(-0.4, 0.8, 0.3).normalize() },
+      },
+    ]),
+    vertexShader: `
+      uniform float uTime;
+
+      varying vec3 vWorldPosition;
+      varying vec3 vWorldNormal;
+
+      #include <fog_pars_vertex>
+
+      void main() {
+        vec4 worldBase = modelMatrix * vec4(position, 1.0);
+        float x = worldBase.x;
+        float z = worldBase.z;
+
+        float wave1 = sin(x * 0.075 + uTime * 0.85) * 0.65;
+        float wave2 = sin(z * 0.095 + uTime * 0.68) * 0.48;
+        float wave3 = sin((x + z) * 0.14 + uTime * 1.1) * 0.25;
+        float wave4 = sin(x * 0.32 - z * 0.27 + uTime * 1.8) * 0.07;
+        float height = wave1 + wave2 + wave3 + wave4;
+
+        // 对波浪公式分别求 X/Z 偏导数，用来得到连续的世界空间法线。
+        float slopeX =
+          cos(x * 0.075 + uTime * 0.85) * 0.65 * 0.075 +
+          cos((x + z) * 0.14 + uTime * 1.1) * 0.25 * 0.14 +
+          cos(x * 0.32 - z * 0.27 + uTime * 1.8) * 0.07 * 0.32;
+        float slopeZ =
+          cos(z * 0.095 + uTime * 0.68) * 0.48 * 0.095 +
+          cos((x + z) * 0.14 + uTime * 1.1) * 0.25 * 0.14 -
+          cos(x * 0.32 - z * 0.27 + uTime * 1.8) * 0.07 * 0.27;
+
+        vWorldPosition = vec3(x, worldBase.y + height, z);
+        // 适当放大法线坡度，让光照能清楚表现波峰和波谷。
+        vWorldNormal = normalize(vec3(-slopeX * 2.8, 1.0, -slopeZ * 2.8));
+
+        vec4 mvPosition = viewMatrix * vec4(vWorldPosition, 1.0);
+        gl_Position = projectionMatrix * mvPosition;
+
+        #include <fog_vertex>
+      }
+    `,
+    fragmentShader: `
+      uniform float uTime;
+      uniform vec3 uDeepColor;
+      uniform vec3 uShallowColor;
+      uniform vec3 uSunColor;
+      uniform vec3 uSunDirection;
+
+      varying vec3 vWorldPosition;
+      varying vec3 vWorldNormal;
+
+      #include <fog_pars_fragment>
+
+      void main() {
+        vec3 normal = normalize(vWorldNormal);
+        if (!gl_FrontFacing) normal = -normal;
+
+        // 只改变光照法线、不改变几何轮廓的细碎波纹。
+        float rippleX =
+          sin(vWorldPosition.x * 0.42 + uTime * 2.1) * 0.075 +
+          sin((vWorldPosition.x + vWorldPosition.z) * 0.68 - uTime * 1.7) * 0.035;
+        float rippleZ =
+          cos(vWorldPosition.z * 0.5 + uTime * 1.8) * 0.07 +
+          cos((vWorldPosition.x - vWorldPosition.z) * 0.74 + uTime * 1.35) * 0.03;
+        normal = normalize(normal + vec3(rippleX, 0.0, rippleZ));
+
+        vec3 viewDirection = normalize(cameraPosition - vWorldPosition);
+        float diffuse = max(dot(normal, uSunDirection), 0.0);
+        float fresnel = pow(1.0 - max(dot(viewDirection, normal), 0.0), 2.4);
+
+        vec3 halfDirection = normalize(uSunDirection + viewDirection);
+        float specular = pow(max(dot(normal, halfDirection), 0.0), 68.0);
+        float crest = smoothstep(0.72, 1.3, vWorldPosition.y);
+        float movingGlint =
+          pow(max(sin(vWorldPosition.x * 0.3 + vWorldPosition.z * 0.22 + uTime * 1.4), 0.0), 10.0);
+
+        vec3 waterColor = mix(uDeepColor, uShallowColor, 0.28 + crest * 0.35);
+        waterColor *= 0.4 + diffuse * 0.42;
+        waterColor += uSunColor * specular * 0.72;
+        waterColor += uSunColor * movingGlint * crest * 0.1;
+        waterColor += vec3(0.08, 0.24, 0.34) * fresnel * 0.75;
+        waterColor = mix(waterColor, vec3(0.55, 0.8, 0.88), crest * 0.1);
+
+        gl_FragColor = vec4(waterColor, 1.0);
+
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+        #include <fog_fragment>
+      }
+    `,
   })
+
+  const ocean = new THREE.Mesh(geometry, material)
+  ocean.name = 'ProceduralOcean'
+  ocean.frustumCulled = false
+  scene?.add(ocean)
+  return ocean
 }
 
-// 收集模型内部所有 Mesh，射线只与 Mesh 求交，不能直接与普通 Group 求交。
-function collectMeshes(root: THREE.Object3D) {
-  const meshes: THREE.Mesh[] = []
-  root.traverse((child) => {
-    if (child instanceof THREE.Mesh) meshes.push(child)
-  })
-  return meshes
-}
+// 海面跟随潜艇的 X/Z 位置，视觉上可以无限航行。
+// 波浪使用世界坐标计算，所以移动平面不会让波形“粘”在潜艇上。
+function updateProceduralOcean(delta: number) {
+  if (!proceduralOcean || !submarineRoot) return
 
-// 首次只解析一个 ocean.glb，然后 clone 出 9 个共享几何体、材质和纹理的区块。
-// clone 不会重新发起网络请求，因此不会重复下载约 27 MB 的模型文件。
-function createOceanTiles(template: THREE.Object3D, animation?: THREE.AnimationClip) {
-  const basePosition = template.position.clone()
-  oceanBasePosition.copy(basePosition)
-
-  for (let index = 0; index < 9; index += 1) {
-    // 第 0 块直接使用模板，其余 8 块复用模板内部资源。
-    const root = index === 0 ? template : template.clone(true)
-    root.position.copy(basePosition)
-    scene?.add(root)
-
-    let mixer: THREE.AnimationMixer | undefined
-    if (animation) {
-      // 每个克隆节点需要自己的 AnimationMixer，但动画速度和相位保持一致。
-      mixer = new THREE.AnimationMixer(root)
-      const action = mixer.clipAction(animation)
-      action.timeScale = OCEAN_ANIMATION_SPEED
-      action.setLoop(THREE.LoopRepeat, Infinity).play()
-    }
-
-    oceanTiles.push({
-      root,
-      mixer,
-      meshes: collectMeshes(root),
-      gridX: 0,
-      gridZ: 0,
-    })
-  }
-
-  updateOceanGrid(true)
-}
-
-// 让 9 个区块始终组成以潜艇所在块为中心的 3 × 3 九宫格。
-// 潜艇越过区块中心边界后，直接重新定位旧实例，相当于回收并复用对象池。
-function updateOceanGrid(force = false) {
-  if (!submarineRoot || oceanTiles.length !== 9) return
-
-  const centerX = Math.round(submarineRoot.position.x / OCEAN_TILE_SPACING)
-  const centerZ = Math.round(submarineRoot.position.z / OCEAN_TILE_SPACING)
-  if (!force && centerX === currentGridX && centerZ === currentGridZ) return
-
-  currentGridX = centerX
-  currentGridZ = centerZ
-  let tileIndex = 0
-
-  for (let dz = -1; dz <= 1; dz += 1) {
-    for (let dx = -1; dx <= 1; dx += 1) {
-      const tile = oceanTiles[tileIndex]
-      if (!tile) continue
-
-      tile.gridX = centerX + dx
-      tile.gridZ = centerZ + dz
-      // 使用 398 而不是 400，使相邻块边缘轻微搭接，减少可见裂缝。
-      tile.root.position.x = oceanBasePosition.x + tile.gridX * OCEAN_TILE_SPACING
-      tile.root.position.z = oceanBasePosition.z + tile.gridZ * OCEAN_TILE_SPACING
-      tileIndex += 1
-    }
-  }
-
-  scene?.updateMatrixWorld(true)
-}
-
-// 根据潜艇位置找到它当前正下方的海洋区块，避免对全部 9 块做昂贵射线检测。
-function currentOceanTile() {
-  const tileX = Math.round((submarineRoot?.position.x ?? 0) / OCEAN_TILE_SPACING)
-  const tileZ = Math.round((submarineRoot?.position.z ?? 0) / OCEAN_TILE_SPACING)
-  return oceanTiles.find((tile) => tile.gridX === tileX && tile.gridZ === tileZ)
-}
-
-// 检测潜艇所在位置的动态海面高度。
-// 海洋有 222 个 Morph Target，射线检测较重，因此限制为每 250ms 一次。
-function sampleWaterHeight(time: number) {
-  if (!submarineRoot || time - lastWaterSampleTime < 250) return
-
-  const tile = currentOceanTile()
-  if (!tile || tile.meshes.length === 0) return
-  lastWaterSampleTime = time
-
-  // 射线固定从海面上方发出，而不是从潜艇上方发出。
-  // 这样潜到 280 米时，射线起点仍然位于水面之上。
-  rayOrigin.set(submarineRoot.position.x, WATER_RAY_HEIGHT, submarineRoot.position.z)
-  raycaster.set(rayOrigin, downDirection)
-  const hit = raycaster.intersectObjects(tile.meshes, false)[0]
-  if (hit) sampledWaterHeight = hit.point.y
+  oceanTime += delta
+  proceduralOcean.material.uniforms.uTime!.value = oceanTime
+  proceduralOcean.position.x = submarineRoot.position.x
+  proceduralOcean.position.z = submarineRoot.position.z
+  sampledWaterHeight = proceduralWaveHeight(
+    submarineRoot.position.x,
+    submarineRoot.position.z,
+    oceanTime,
+  )
 }
 
 // 统一潜艇尺寸、水平居中，并设置用户确认的水面吃水线。
@@ -309,10 +337,86 @@ function showLimitNotice(message: string) {
   }, 1800)
 }
 
+function isAtPeriscopeDepth() {
+  const depth = currentDepth * SCENE_TO_METERS
+  return depth >= PERISCOPE_MIN_DEPTH_METERS && depth <= PERISCOPE_MAX_DEPTH_METERS
+}
+
+function disablePeriscope(message = '') {
+  if (!isPeriscopeActive.value) return
+  isPeriscopeActive.value = false
+  isDraggingPeriscope = false
+  if (controls) controls.enabled = currentDepth < 0.02
+  restoreSurfaceCamera()
+  if (message) showLimitNotice(message)
+}
+
+function restoreSurfaceCamera() {
+  if (!camera || !controls || !submarineRoot) return
+  camera.position.set(
+    submarineRoot.position.x + 25,
+    submarineRoot.position.y + 11,
+    submarineRoot.position.z + 27,
+  )
+  controls.target.set(submarineRoot.position.x, submarineRoot.position.y + 0.2, submarineRoot.position.z)
+  previousSubmarinePosition.copy(submarineRoot.position)
+}
+
+function togglePeriscope() {
+  if (isPeriscopeActive.value) {
+    disablePeriscope()
+    return
+  }
+
+  if (!isAtPeriscopeDepth()) {
+    showLimitNotice('不在潜望镜深度')
+    return
+  }
+
+  isPeriscopeActive.value = true
+  periscopeYaw = heading
+  pressedKeys.delete('KeyK')
+  pressedKeys.delete('KeyL')
+  if (controls) {
+    controls.enabled = false
+    controls.autoRotate = false
+  }
+}
+
+function updatePeriscopeState() {
+  if (!isPeriscopeActive.value) {
+    if (controls) controls.enabled = currentDepth < 0.02
+    return
+  }
+
+  if (!isAtPeriscopeDepth()) {
+    disablePeriscope('请前往潜望镜深度13-15m')
+  }
+}
+
+function updatePeriscopeCamera() {
+  if (!isPeriscopeActive.value || !camera || !submarineRoot) return
+
+  const eyeY = sampledWaterHeight + PERISCOPE_EYE_HEIGHT
+  camera.position.set(submarineRoot.position.x, eyeY, submarineRoot.position.z)
+  camera.lookAt(
+    submarineRoot.position.x + Math.cos(periscopeYaw) * PERISCOPE_LOOK_DISTANCE,
+    eyeY,
+    submarineRoot.position.z - Math.sin(periscopeYaw) * PERISCOPE_LOOK_DISTANCE,
+  )
+}
+
 // -------------------- 上浮和下潜 --------------------
 function updateDepth(delta: number) {
+  if (isPeriscopeActive.value) {
+    pressedKeys.delete('KeyK')
+    pressedKeys.delete('KeyL')
+  }
+
   // L 对应 +1（增加深度），K 对应 -1（减小深度）。
-  const diveInput = (pressedKeys.has('KeyL') ? 1 : 0) - (pressedKeys.has('KeyK') ? 1 : 0)
+  const diveInput = isPeriscopeActive.value
+    ? 0
+    : (pressedKeys.has('KeyL') ? 1 : 0) - (pressedKeys.has('KeyK') ? 1 : 0)
 
   if (diveInput !== 0) {
     // 目标深度永远限制在 0～280 米之间，因此潜艇不会飞到海面以上。
@@ -421,9 +525,24 @@ function updateSubmarineHeight(delta: number) {
   )
 }
 
+// 上浮/下潜时只改变模型视觉俯仰，不改变真实深度、碰撞或潜望镜判断。
+function updateSubmarinePitch(delta: number) {
+  if (!submarineVisual) return
+
+  const pitchRange = 8 * METERS_TO_SCENE
+  const pitchIntent = THREE.MathUtils.clamp((targetDepth - currentDepth) / pitchRange, -1, 1)
+  const targetPitch = -pitchIntent * MAX_SUBMARINE_PITCH
+  submarineVisual.rotation.z = THREE.MathUtils.damp(
+    submarineVisual.rotation.z,
+    targetPitch,
+    3.8,
+    delta,
+  )
+}
+
 // 相机和 OrbitControls 的观察中心只跟随位移，不跟随潜艇航向强制旋转。
 function updateCameraFollow() {
-  if (!submarineRoot || !camera || !controls) return
+  if (!submarineRoot || !camera || !controls || isPeriscopeActive.value) return
   movementDelta.copy(submarineRoot.position).sub(previousSubmarinePosition)
   camera.position.add(movementDelta)
   controls.target.add(movementDelta)
@@ -451,7 +570,8 @@ function updateHud(time: number) {
   lastHudUpdateTime = time
   speedKmh.value = currentSpeed * SCENE_TO_METERS * 3.6
   depthMeters.value = currentDepth * SCENE_TO_METERS
-  headingDegrees.value = ((THREE.MathUtils.radToDeg(heading) % 360) + 360) % 360
+  // 罗盘约定：000 指向世界 -Z，090 指向 +X，180 指向 +Z，270 指向 -X。
+  headingDegrees.value = ((90 - THREE.MathUtils.radToDeg(heading)) % 360 + 360) % 360
   navigationState.value = currentDepth < 0.02 ? '水面' : '水下'
 }
 
@@ -466,6 +586,15 @@ function isEditableTarget(target: EventTarget | null) {
 function handleKeyDown(event: KeyboardEvent) {
   if (!CONTROL_CODES.has(event.code) || isEditableTarget(event.target)) return
   event.preventDefault()
+  if (event.code === 'KeyQ') {
+    if (!pressedKeys.has('KeyQ')) togglePeriscope()
+    pressedKeys.add(event.code)
+    return
+  }
+  if (isPeriscopeActive.value && (event.code === 'KeyK' || event.code === 'KeyL')) {
+    showLimitNotice('需要先收起潜望镜')
+    return
+  }
   pressedKeys.add(event.code)
   if (controls) controls.autoRotate = false
 }
@@ -479,6 +608,29 @@ function handleKeyUp(event: KeyboardEvent) {
 function clearPressedKeys() {
   // 窗口失焦时清空，避免用户松键发生在窗口外导致潜艇一直移动。
   pressedKeys.clear()
+  isDraggingPeriscope = false
+}
+
+function handlePeriscopePointerDown(event: PointerEvent) {
+  if (!isPeriscopeActive.value) return
+  isDraggingPeriscope = true
+  lastPeriscopePointerX = event.clientX
+  const target = event.currentTarget as HTMLElement
+  target.setPointerCapture(event.pointerId)
+}
+
+function handlePeriscopePointerMove(event: PointerEvent) {
+  if (!isPeriscopeActive.value || !isDraggingPeriscope) return
+  const deltaX = event.clientX - lastPeriscopePointerX
+  lastPeriscopePointerX = event.clientX
+  periscopeYaw -= deltaX * PERISCOPE_MOUSE_SENSITIVITY
+}
+
+function handlePeriscopePointerUp(event: PointerEvent) {
+  if (!isDraggingPeriscope) return
+  isDraggingPeriscope = false
+  const target = event.currentTarget as HTMLElement
+  target.releasePointerCapture(event.pointerId)
 }
 
 // -------------------- Vue 组件挂载：创建 Three.js 场景 --------------------
@@ -558,34 +710,27 @@ onMounted(async () => {
   const loader = new GLTFLoader()
 
   try {
-    // 海洋和潜艇并行加载，减少总等待时间。
-    const [oceanGltf, submarineGltf] = await Promise.all([
-      loader.loadAsync(oceanUrl, (event) => updateLoadingProgress(oceanUrl, event)),
-      loader.loadAsync(submarineUrl, (event) => updateLoadingProgress(submarineUrl, event)),
-    ])
+    // 海洋由代码立即创建，网络只需要加载潜艇 GLB。
+    const submarineGltf = await loader.loadAsync(submarineUrl, (event) =>
+      updateLoadingProgress(submarineUrl, event),
+    )
 
     if (!scene) return
-
-    // 先准备海洋模板，之后 9 个区块共享这份模型资源。
-    oceanTemplate = oceanGltf.scene
-    normalizeOcean(oceanTemplate)
-    tuneOceanMaterials(oceanTemplate)
-    resources.push(oceanTemplate)
-
-    const oceanAnimation =
-      THREE.AnimationClip.findByName(oceanGltf.animations, 'KeyAction') ?? oceanGltf.animations[0]
 
     // 根节点负责世界移动和航向；视觉模型保留自己的缩放、居中和吃水偏移。
     submarineRoot = new THREE.Group()
     const submarine = submarineGltf.scene
     normalizeSubmarine(submarine)
     tuneSubmarineMaterials(submarine)
+    submarineVisual = submarine
     submarineRoot.add(submarine)
     scene.add(submarineRoot)
     resources.push(submarine)
     previousSubmarinePosition.copy(submarineRoot.position)
 
-    createOceanTiles(oceanTemplate, oceanAnimation)
+    // 创建单张连续程序化海面，不再加载 ocean.glb，也没有区块接缝。
+    proceduralOcean = createProceduralOcean()
+    resources.push(proceduralOcean)
 
     // GLB 下载并解析完成，此时才把进度从 99% 设置为 100%。
     loadingProgress.value = 100
@@ -606,18 +751,18 @@ onMounted(async () => {
     const delta = previousFrameTime === 0 ? 0 : Math.min((time - previousFrameTime) / 1000, 0.1)
     previousFrameTime = time
 
-    // 执行顺序很重要：先更新海浪和运动，再检测海面，最后更新镜头并绘制。
-    for (const tile of oceanTiles) tile.mixer?.update(delta)
+    // 执行顺序很重要：先更新运动，再计算连续海浪高度，最后更新镜头并绘制。
     updateDepth(delta)
     updateHorizontalMovement(delta)
-    updateOceanGrid()
-    scene?.updateMatrixWorld(true)
-    sampleWaterHeight(time)
+    updateProceduralOcean(delta)
     updateSubmarineHeight(delta)
+    updateSubmarinePitch(delta)
+    updatePeriscopeState()
     updateCameraFollow()
+    updatePeriscopeCamera()
     updateUnderwaterAppearance()
     updateHud(time)
-    controls?.update()
+    if (!isPeriscopeActive.value) controls?.update()
     if (renderer && scene && camera) renderer.render(scene, camera)
   }
   render()
@@ -634,19 +779,14 @@ onBeforeUnmount(() => {
   window.removeEventListener('keyup', handleKeyUp)
   window.removeEventListener('blur', clearPressedKeys)
 
-  // 先停止动画并从场景移除 9 个海洋实例。
-  for (const tile of oceanTiles) {
-    tile.mixer?.stopAllAction()
-    tile.root.removeFromParent()
-  }
+  proceduralOcean?.removeFromParent()
   submarineRoot?.removeFromParent()
-  // 海洋克隆共享底层资源，所以只释放 resources 中记录的模板和潜艇资源。
+  // 释放潜艇模型以及程序化海面的几何体和 ShaderMaterial。
   for (const object of resources) disposeObject(object)
 
   renderer?.dispose()
   renderer?.domElement.remove()
 
-  oceanTiles.length = 0
   resources.length = 0
   fileProgress.clear()
   pressedKeys.clear()
@@ -655,7 +795,8 @@ onBeforeUnmount(() => {
   renderer = undefined
   controls = undefined
   submarineRoot = undefined
-  oceanTemplate = undefined
+  submarineVisual = undefined
+  proceduralOcean = undefined
   hemisphereLight = undefined
   keyLight = undefined
   rimLight = undefined
@@ -664,30 +805,33 @@ onBeforeUnmount(() => {
 
 <template>
   <section ref="viewer" class="viewer" aria-label="3D 潜艇模型查看器">
-    <!-- 左上角航行仪表，每 100ms 从 Three.js 运行状态同步一次。 -->
-    <aside v-if="isLoaded" class="navigation-hud" aria-label="潜艇航行信息">
-      <div>
-        <span>速度</span>
-        <strong>{{ speedKmh.toFixed(1) }} km/h</strong>
-      </div>
-      <div>
-        <span>深度</span>
-        <strong>{{ depthMeters.toFixed(1) }} m</strong>
-      </div>
-      <div>
-        <span>航向</span>
-        <strong>{{ headingDegrees.toFixed(0).padStart(3, '0') }}°</strong>
-      </div>
-      <div>
-        <span>状态</span>
-        <strong>{{ navigationState }}</strong>
-      </div>
-    </aside>
+    <div v-if="isLoaded && showUnderwaterStatus" class="underwater-screen" aria-hidden="true"></div>
 
-    <!-- 两个 GLB 下载和解析完成前显示加载进度。 -->
+    <UnderwaterStatusPanel
+      v-if="isLoaded"
+      :depth-meters="depthMeters"
+      :speed-knots="speedKnots"
+      :heading-degrees="headingDegrees"
+      :navigation-state="navigationState"
+    />
+
+    <div
+      v-if="isLoaded && isPeriscopeActive"
+      class="periscope-view"
+      aria-label="潜望镜视角"
+      @pointerdown="handlePeriscopePointerDown"
+      @pointermove="handlePeriscopePointerMove"
+      @pointerup="handlePeriscopePointerUp"
+      @pointercancel="handlePeriscopePointerUp"
+      @pointerleave="handlePeriscopePointerUp"
+    >
+      <img :src="periscopeSightUrl" alt="" aria-hidden="true" draggable="false" />
+    </div>
+
+    <!-- 潜艇 GLB 下载和解析完成前显示加载进度。 -->
     <div v-if="!isLoaded && !loadingError" class="loading-panel" role="status">
       <div class="spinner" aria-hidden="true"></div>
-      <p>正在载入海洋与潜艇</p>
+      <p>正在生成海洋并载入潜艇</p>
       <strong>{{ loadingLabel }}</strong>
       <div class="progress-track" aria-hidden="true">
         <span :style="{ width: loadingLabel }"></span>
@@ -699,7 +843,7 @@ onBeforeUnmount(() => {
 
     <!-- 首次进入页面时短暂显示操作说明。 -->
     <Transition name="hint">
-      <p v-if="showHint" class="control-hint">
+      <p v-if="showHint && !isSubmerged" class="control-hint">
         W/S 前进倒退 · A/D 转向 · K 上浮 · L 下潜 · 鼠标观察
       </p>
     </Transition>
@@ -730,11 +874,32 @@ onBeforeUnmount(() => {
   height: 100%;
 }
 
+.periscope-view {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  cursor: ew-resize;
+  touch-action: none;
+  user-select: none;
+}
+
+.periscope-view img {
+  display: block;
+  width: min(92vw, 92vh);
+  height: min(92vw, 92vh);
+  object-fit: contain;
+  box-shadow: 0 0 0 100vmax #000;
+  pointer-events: none;
+  user-select: none;
+}
+
 .loading-panel,
 .error-panel,
 .control-hint,
-.limit-notice,
-.navigation-hud {
+.limit-notice {
   position: absolute;
   z-index: 2;
   color: rgba(239, 248, 255, 0.96);
@@ -742,43 +907,12 @@ onBeforeUnmount(() => {
   letter-spacing: 0.03em;
 }
 
-/* 航行 HUD 使用半透明背景，避免完全遮住后面的 3D 场景。 */
-.navigation-hud {
-  top: 22px;
-  left: 22px;
-  display: grid;
-  min-width: 190px;
-  overflow: hidden;
-  border: 1px solid rgba(167, 218, 246, 0.2);
-  border-radius: 12px;
-  background: rgba(2, 16, 25, 0.68);
-  box-shadow: 0 18px 45px rgba(0, 5, 10, 0.22);
-  backdrop-filter: blur(10px);
+.underwater-screen {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  background: #000;
   pointer-events: none;
-}
-
-.navigation-hud div {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-  padding: 8px 12px;
-  border-bottom: 1px solid rgba(167, 218, 246, 0.1);
-}
-
-.navigation-hud div:last-child {
-  border-bottom: 0;
-}
-
-.navigation-hud span {
-  color: rgba(184, 217, 235, 0.68);
-  font-size: 11px;
-}
-
-.navigation-hud strong {
-  color: #eef9ff;
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
 }
 
 /* 加载界面始终位于画面中心。 */
@@ -858,6 +992,7 @@ onBeforeUnmount(() => {
 .limit-notice {
   top: 26px;
   left: 50%;
+  z-index: 6;
   margin: 0;
   padding: 9px 16px;
   transform: translateX(-50%);
@@ -909,12 +1044,6 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 600px) {
-  .navigation-hud {
-    top: 12px;
-    left: 12px;
-    min-width: 165px;
-  }
-
   .control-hint {
     width: max-content;
     max-width: calc(100vw - 24px);
