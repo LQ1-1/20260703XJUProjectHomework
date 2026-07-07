@@ -5,7 +5,9 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import UnderwaterStatusPanel from './UnderwaterStatusPanel.vue'
 import submarineUrl from '../../model/type_vii_d_u-boat.glb?url'
+import sunUrl from '../../model/sun.glb?url'
 import periscopeSightUrl from '../../assets/Uboot Periscope sight/UBootPeriscopeAimingSight.png?url'
+import '../../css/test-3d-programized-ocean.css'
 
 // -------------------- 现实单位和场景单位换算 --------------------
 // 潜艇模型在 Three.js 中缩放为 22 单位，对应现实中的约 77 米。
@@ -23,10 +25,15 @@ const MAX_VERTICAL_SPEED = 4 * METERS_TO_SCENE // 最大上浮/下潜速度：�
 const SURFACE_MAX_SPEED = (30_000 * METERS_TO_SCENE) / 3600 // 水面 30 km/h
 const SUBMERGED_MAX_SPEED = (13_000 * METERS_TO_SCENE) / 3600 // 水下 13 km/h
 const REVERSE_SPEED_RATIO = 0.4 // 倒车最高速度是对应前进速度的 40%
-const MAX_TURN_RATE = THREE.MathUtils.degToRad(4) // 满速满舵每秒最多转向 4°
+const MAX_TURN_RATE = THREE.MathUtils.degToRad(2) // 满速满舵每秒最多转向 4°
 const SPEED_TRANSITION_DEPTH = 15 * METERS_TO_SCENE // 前 15 米内平滑切换水面/水下限速
-const UNDERWATER_UI_DEPTH_METERS = 6  //控制UnderWaterStatusPanel显示的深度指标
-const MAX_SUBMARINE_PITCH = THREE.MathUtils.degToRad(25)  //控制潜艇上浮或者下潜的抬头或低头的幅度
+const UNDERWATER_UI_DEPTH_METERS = 130  //控制UnderWaterStatusPanel显示的深度指标, 潜深超过这个值后显示UnderWaterStatusPanel界面
+const MAX_SUBMARINE_PITCH = THREE.MathUtils.degToRad(39)  //控制潜艇上浮或者下潜的抬头或低头的幅度
+const PITCH_RESPONSE_SENSITIVITY=17;   //俯仰响应灵敏度,数值越大灵敏度越低
+const PITCH_SMOOTHING=1.04;    //俯仰平滑度，数值越小变化越慢
+
+
+
 
 //潜望镜相关变量
 const PERISCOPE_MIN_DEPTH_METERS = 13   //设置潜望镜深度13~15m
@@ -35,8 +42,11 @@ const PERISCOPE_EYE_HEIGHT = 1.05 // 潜望镜镜头略高于当前海面
 const PERISCOPE_LOOK_DISTANCE = 200
 const PERISCOPE_MOUSE_SENSITIVITY = 0.004 //潜望镜视角的鼠标灵敏度
 const CONTROL_CODES = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyK', 'KeyL', 'KeyQ'])   //控制按键
-const SURFACE_BACKGROUND = new THREE.Color(0x061522)
-const DEEP_BACKGROUND = new THREE.Color(0x00121d)
+const SURFACE_BACKGROUND = new THREE.Color(0x6fb9e8)  //背景色
+const DEEP_BACKGROUND = new THREE.Color(0x00070d)
+const SUN_OFFSET = new THREE.Vector3(-180, 115, -220)
+const SUN_DIRECTION = SUN_OFFSET.clone().normalize()
+const SUN_MODEL_SCALE = 52
 
 //波浪振幅
 const PRIMARY_SWELL=0.88
@@ -56,6 +66,10 @@ const headingDegrees = ref(0) // HUD：当前航向角，范围 0～359°
 const navigationState = ref<'水面' | '水下'>('水面')
 const limitNotice = ref('') // 到达水面或最大潜深时的提示
 const isPeriscopeActive = ref(false)
+
+//潜艇世界坐标，测试时展示
+const SubmarineWorldX=ref(0);
+const SubmarineWorldZ=ref(0);
 
 const loadingLabel = computed(() => `${Math.round(loadingProgress.value)}%`)
 const speedKnots = computed(() => speedKmh.value / 1.852)
@@ -78,10 +92,12 @@ let camera: THREE.PerspectiveCamera | undefined // 玩家观察场景的透视�
 let controls: OrbitControls | undefined // 鼠标旋转和缩放控制器
 let submarineRoot: THREE.Group | undefined // 负责潜艇移动、转向的根节点
 let submarineVisual: THREE.Object3D | undefined // 只负责模型自身视觉姿态，例如上浮/下潜俯仰
+let sunModel: THREE.Object3D | undefined
 let proceduralOcean: THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMaterial> | undefined
 let resizeObserver: ResizeObserver | undefined
 let hemisphereLight: THREE.HemisphereLight | undefined
 let keyLight: THREE.DirectionalLight | undefined
+let keyLightTarget: THREE.Object3D | undefined
 let rimLight: THREE.DirectionalLight | undefined
 
 // -------------------- 游戏运行状态 --------------------
@@ -102,6 +118,7 @@ let depthLimitWasActive = false
 let periscopeYaw = 0
 let isDraggingPeriscope = false
 let lastPeriscopePointerX = 0
+
 
 // 程序化海洋无需下载，这里只记录潜艇 GLB 的下载进度。
 function updateLoadingProgress(url: string, event: ProgressEvent<EventTarget>) {
@@ -154,10 +171,10 @@ function createProceduralOcean() {
       THREE.UniformsLib.fog,
       {
         uTime: { value: 0 },
-        uDeepColor: { value: new THREE.Color(0x001f36) },
-        uShallowColor: { value: new THREE.Color(0x08799c) },
-        uSunColor: { value: new THREE.Color(0xd9f3ff) },
-        uSunDirection: { value: new THREE.Vector3(-0.4, 0.8, 0.3).normalize() },
+        uDeepColor: { value: new THREE.Color(0x04517a) },
+        uShallowColor: { value: new THREE.Color(0x39b9d0) },
+        uSunColor: { value: new THREE.Color(0xfff1c0) },
+        uSunDirection: { value: SUN_DIRECTION.clone() },
       },
     ]),
     vertexShader: `
@@ -235,11 +252,11 @@ function createProceduralOcean() {
           pow(max(sin(vWorldPosition.x * 0.3 + vWorldPosition.z * 0.22 + uTime * 1.4), 0.0), 10.0);
 
         vec3 waterColor = mix(uDeepColor, uShallowColor, 0.28 + crest * 0.35);
-        waterColor *= 0.4 + diffuse * 0.42;
-        waterColor += uSunColor * specular * 0.72;
-        waterColor += uSunColor * movingGlint * crest * 0.1;
-        waterColor += vec3(0.08, 0.24, 0.34) * fresnel * 0.75;
-        waterColor = mix(waterColor, vec3(0.55, 0.8, 0.88), crest * 0.1);
+        waterColor *= 0.68 + diffuse * 0.5;
+        waterColor += uSunColor * specular * 0.95;
+        waterColor += uSunColor * movingGlint * crest * 0.16;
+        waterColor += vec3(0.12, 0.34, 0.44) * fresnel * 0.85;
+        waterColor = mix(waterColor, vec3(0.68, 0.9, 0.96), crest * 0.16);
 
         gl_FragColor = vec4(waterColor, 1.0);
 
@@ -273,6 +290,15 @@ function updateProceduralOcean(delta: number) {
   )
 }
 
+function updateSunAndLightPosition() {
+  if (!submarineRoot) return
+
+  const sunPosition = submarineRoot.position.clone().add(SUN_OFFSET)
+  sunModel?.position.copy(sunPosition)
+  keyLight?.position.copy(sunPosition)
+  keyLightTarget?.position.copy(submarineRoot.position)
+}
+
 // 统一潜艇尺寸、水平居中，并设置用户确认的水面吃水线。
 function normalizeSubmarine(submarine: THREE.Object3D) {
   const box = new THREE.Box3().setFromObject(submarine)
@@ -304,6 +330,19 @@ function tuneSubmarineMaterials(submarine: THREE.Object3D) {
       material.metalness = 0.3
       material.needsUpdate = true
     }
+  })
+}
+
+function tuneSunMaterials(sun: THREE.Object3D) {
+  sun.traverse((child) => {
+    if (!(child instanceof THREE.Mesh)) return
+    const materials = Array.isArray(child.material) ? child.material : [child.material]
+    for (const material of materials) material.dispose()
+    child.material = new THREE.MeshBasicMaterial({
+      color: 0xfff2b6,
+      fog: false,
+      toneMapped: false,
+    })
   })
 }
 
@@ -529,13 +568,13 @@ function updateSubmarineHeight(delta: number) {
 function updateSubmarinePitch(delta: number) {
   if (!submarineVisual) return
 
-  const pitchRange = 8 * METERS_TO_SCENE
+  const pitchRange = PITCH_RESPONSE_SENSITIVITY * METERS_TO_SCENE    //抬头/ 低头的角度变化灵敏度
   const pitchIntent = THREE.MathUtils.clamp((targetDepth - currentDepth) / pitchRange, -1, 1)
   const targetPitch = -pitchIntent * MAX_SUBMARINE_PITCH
   submarineVisual.rotation.z = THREE.MathUtils.damp(
     submarineVisual.rotation.z,
     targetPitch,
-    3.8,
+    PITCH_SMOOTHING,
     delta,
   )
 }
@@ -558,10 +597,10 @@ function updateUnderwaterAppearance() {
   const depthFactor = THREE.MathUtils.smoothstep(currentDepth * SCENE_TO_METERS, 0, 80)
   scene.background.lerpColors(SURFACE_BACKGROUND, DEEP_BACKGROUND, depthFactor)
   scene.fog.color.copy(scene.background)
-  scene.fog.density = THREE.MathUtils.lerp(0.01, 0.026, depthFactor)
-  if (hemisphereLight) hemisphereLight.intensity = THREE.MathUtils.lerp(2.25, 0.4, depthFactor)
-  if (keyLight) keyLight.intensity = THREE.MathUtils.lerp(4.5, 0.75, depthFactor)
-  if (rimLight) rimLight.intensity = THREE.MathUtils.lerp(3.2, 1.4, depthFactor)
+  scene.fog.density = THREE.MathUtils.lerp(0.0008, 0.03, depthFactor)
+  if (hemisphereLight) hemisphereLight.intensity = THREE.MathUtils.lerp(3.4, 0.22, depthFactor)
+  if (keyLight) keyLight.intensity = THREE.MathUtils.lerp(6.2, 0.28, depthFactor)
+  if (rimLight) rimLight.intensity = THREE.MathUtils.lerp(2.6, 0.75, depthFactor)
 }
 
 // HUD 不需要每帧刷新，限制为每 100ms 一次可以减少 Vue 的界面更新次数。
@@ -573,6 +612,11 @@ function updateHud(time: number) {
   // 罗盘约定：000 指向世界 -Z，090 指向 +X，180 指向 +Z，270 指向 -X。
   headingDegrees.value = ((90 - THREE.MathUtils.radToDeg(heading)) % 360 + 360) % 360
   navigationState.value = currentDepth < 0.02 ? '水面' : '水下'
+
+    if (submarineRoot) {
+    SubmarineWorldX.value = submarineRoot.position.x
+    SubmarineWorldZ.value = submarineRoot.position.z
+  }
 }
 
 // 用户正在输入表单时，不抢占 WASD/KL 按键。
@@ -640,11 +684,11 @@ onMounted(async () => {
 
   // 创建场景、背景和距离雾。
   scene = new THREE.Scene()
-  scene.background = new THREE.Color(0x061522)
-  scene.fog = new THREE.FogExp2(0x061522, 0.01)
+  scene.background = SURFACE_BACKGROUND.clone()
+  scene.fog = new THREE.FogExp2(SURFACE_BACKGROUND, 0.0008)
 
   // 参数依次为视野角度、宽高比、最近可见距离、最远可见距离。
-  camera = new THREE.PerspectiveCamera(42, 1, 0.05, 350)
+  camera = new THREE.PerspectiveCamera(42, 1, 0.05, 1200)
   camera.position.set(25, 11, 27)
 
   try {
@@ -659,7 +703,7 @@ onMounted(async () => {
   // sRGB + ACES 色调映射可以得到更自然的光照和颜色。
   renderer.outputColorSpace = THREE.SRGBColorSpace
   renderer.toneMapping = THREE.ACESFilmicToneMapping
-  renderer.toneMappingExposure = 1.15
+  renderer.toneMappingExposure = 1.28
   container.appendChild(renderer.domElement)
 
   // 鼠标拖拽旋转、滚轮缩放；首次由玩家操作后关闭自动旋转。
@@ -678,14 +722,17 @@ onMounted(async () => {
   })
 
   // 半球光负责基础环境光，两个方向光负责主体照明和蓝色轮廓。
-  hemisphereLight = new THREE.HemisphereLight(0xb9dcff, 0x071018, 2.25)
+  hemisphereLight = new THREE.HemisphereLight(0xdff5ff, 0x24465c, 3.4)
   scene.add(hemisphereLight)
 
-  keyLight = new THREE.DirectionalLight(0xfff1d6, 4.5)
-  keyLight.position.set(-12, 18, 14)
+  keyLight = new THREE.DirectionalLight(0xfff1d6, 6.2)
+  keyLight.position.copy(SUN_OFFSET)
+  keyLightTarget = new THREE.Object3D()
+  scene.add(keyLightTarget)
+  keyLight.target = keyLightTarget
   scene.add(keyLight)
 
-  rimLight = new THREE.DirectionalLight(0x4fa7ff, 3.2)
+  rimLight = new THREE.DirectionalLight(0x8bd3ff, 2.6)
   rimLight.position.set(14, 8, -18)
   scene.add(rimLight)
 
@@ -710,10 +757,11 @@ onMounted(async () => {
   const loader = new GLTFLoader()
 
   try {
-    // 海洋由代码立即创建，网络只需要加载潜艇 GLB。
-    const submarineGltf = await loader.loadAsync(submarineUrl, (event) =>
-      updateLoadingProgress(submarineUrl, event),
-    )
+    // 海洋由代码立即创建，网络只需要加载潜艇和太阳 GLB。
+    const [submarineGltf, sunGltf] = await Promise.all([
+      loader.loadAsync(submarineUrl, (event) => updateLoadingProgress(submarineUrl, event)),
+      loader.loadAsync(sunUrl),
+    ])
 
     if (!scene) return
 
@@ -727,6 +775,13 @@ onMounted(async () => {
     scene.add(submarineRoot)
     resources.push(submarine)
     previousSubmarinePosition.copy(submarineRoot.position)
+
+    sunModel = sunGltf.scene
+    sunModel.scale.setScalar(SUN_MODEL_SCALE)
+    tuneSunMaterials(sunModel)
+    scene.add(sunModel)
+    resources.push(sunModel)
+    updateSunAndLightPosition()
 
     // 创建单张连续程序化海面，不再加载 ocean.glb，也没有区块接缝。
     proceduralOcean = createProceduralOcean()
@@ -755,6 +810,7 @@ onMounted(async () => {
     updateDepth(delta)
     updateHorizontalMovement(delta)
     updateProceduralOcean(delta)
+    updateSunAndLightPosition()
     updateSubmarineHeight(delta)
     updateSubmarinePitch(delta)
     updatePeriscopeState()
@@ -780,6 +836,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('blur', clearPressedKeys)
 
   proceduralOcean?.removeFromParent()
+  sunModel?.removeFromParent()
   submarineRoot?.removeFromParent()
   // 释放潜艇模型以及程序化海面的几何体和 ShaderMaterial。
   for (const object of resources) disposeObject(object)
@@ -796,9 +853,11 @@ onBeforeUnmount(() => {
   controls = undefined
   submarineRoot = undefined
   submarineVisual = undefined
+  sunModel = undefined
   proceduralOcean = undefined
   hemisphereLight = undefined
   keyLight = undefined
+  keyLightTarget = undefined
   rimLight = undefined
 })
 </script>
@@ -813,6 +872,8 @@ onBeforeUnmount(() => {
       :speed-knots="speedKnots"
       :heading-degrees="headingDegrees"
       :navigation-state="navigationState"
+      :submarine-world-x="SubmarineWorldX"
+      :submarine-world-z="SubmarineWorldZ"
     />
 
     <div
@@ -854,200 +915,3 @@ onBeforeUnmount(() => {
     </Transition>
   </section>
 </template>
-
-<style scoped>
-/* 固定铺满浏览器窗口，Canvas 和所有 HUD 都放在这个容器中。 */
-.viewer {
-  position: fixed;
-  inset: 0;
-  overflow: hidden;
-  background:
-    radial-gradient(circle at 50% 35%, rgba(23, 74, 105, 0.65), transparent 42%),
-    linear-gradient(180deg, #0a2639 0%, #061522 68%, #02080d 100%);
-  touch-action: none;
-}
-
-/* :deep() 用来选中 Three.js 动态插入的 canvas 元素。 */
-.viewer :deep(canvas) {
-  display: block;
-  width: 100%;
-  height: 100%;
-}
-
-.periscope-view {
-  position: absolute;
-  inset: 0;
-  z-index: 4;
-  display: grid;
-  place-items: center;
-  overflow: hidden;
-  cursor: ew-resize;
-  touch-action: none;
-  user-select: none;
-}
-
-.periscope-view img {
-  display: block;
-  width: min(92vw, 92vh);
-  height: min(92vw, 92vh);
-  object-fit: contain;
-  box-shadow: 0 0 0 100vmax #000;
-  pointer-events: none;
-  user-select: none;
-}
-
-.loading-panel,
-.error-panel,
-.control-hint,
-.limit-notice {
-  position: absolute;
-  z-index: 2;
-  color: rgba(239, 248, 255, 0.96);
-  font-family: Inter, system-ui, sans-serif;
-  letter-spacing: 0.03em;
-}
-
-.underwater-screen {
-  position: absolute;
-  inset: 0;
-  z-index: 3;
-  background: #000;
-  pointer-events: none;
-}
-
-/* 加载界面始终位于画面中心。 */
-.loading-panel {
-  top: 50%;
-  left: 50%;
-  display: grid;
-  width: min(280px, calc(100vw - 48px));
-  justify-items: center;
-  transform: translate(-50%, -50%);
-}
-
-.loading-panel p {
-  margin-top: 16px;
-  font-size: 14px;
-}
-
-.loading-panel strong {
-  margin: 5px 0 10px;
-  font-size: 12px;
-  color: rgba(189, 225, 247, 0.78);
-}
-
-/* CSS 圆环加载动画。 */
-.spinner {
-  width: 38px;
-  height: 38px;
-  border: 2px solid rgba(133, 202, 243, 0.2);
-  border-top-color: #a9ddfa;
-  border-radius: 50%;
-  animation: spin 0.85s linear infinite;
-}
-
-.progress-track {
-  width: 100%;
-  height: 2px;
-  overflow: hidden;
-  border-radius: 2px;
-  background: rgba(157, 213, 246, 0.15);
-}
-
-.progress-track span {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, #5ca8d4, #c5ecff);
-  transition: width 180ms ease;
-}
-
-.error-panel {
-  top: 50%;
-  left: 50%;
-  margin: 0;
-  padding: 14px 20px;
-  transform: translate(-50%, -50%);
-  border: 1px solid rgba(255, 140, 140, 0.35);
-  border-radius: 10px;
-  background: rgba(45, 7, 11, 0.78);
-}
-
-/* 底部操作提示不接收鼠标事件，避免影响 OrbitControls。 */
-.control-hint {
-  bottom: 28px;
-  left: 50%;
-  margin: 0;
-  padding: 8px 14px;
-  transform: translateX(-50%);
-  border: 1px solid rgba(190, 225, 244, 0.18);
-  border-radius: 999px;
-  background: rgba(3, 16, 25, 0.58);
-  font-size: 12px;
-  backdrop-filter: blur(8px);
-  pointer-events: none;
-}
-
-/* 上下限提示显示在页面顶部中间。 */
-.limit-notice {
-  top: 26px;
-  left: 50%;
-  z-index: 6;
-  margin: 0;
-  padding: 9px 16px;
-  transform: translateX(-50%);
-  border: 1px solid rgba(255, 218, 143, 0.3);
-  border-radius: 999px;
-  background: rgba(47, 31, 5, 0.76);
-  color: #ffe3a7;
-  font-size: 12px;
-  backdrop-filter: blur(8px);
-  pointer-events: none;
-}
-
-/* Vue Transition 使用的淡入、淡出动画。 */
-.hint-enter-active,
-.hint-leave-active,
-.notice-enter-active,
-.notice-leave-active {
-  transition:
-    opacity 0.45s ease,
-    transform 0.45s ease;
-}
-
-.hint-enter-from,
-.hint-leave-to,
-.notice-enter-from,
-.notice-leave-to {
-  opacity: 0;
-  transform: translate(-50%, 8px);
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .spinner {
-    animation-duration: 1.8s;
-  }
-
-  .progress-track span,
-  .hint-enter-active,
-  .hint-leave-active,
-  .notice-enter-active,
-  .notice-leave-active {
-    transition: none;
-  }
-}
-
-@media (max-width: 600px) {
-  .control-hint {
-    width: max-content;
-    max-width: calc(100vw - 24px);
-    text-align: center;
-  }
-}
-</style>

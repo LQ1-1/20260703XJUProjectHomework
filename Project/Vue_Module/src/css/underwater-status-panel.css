@@ -1,0 +1,66 @@
+.underwater-status {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  z-index: 5;
+  color: rgba(235, 248, 255, 0.94);
+  font-family: Inter, system-ui, sans-serif;
+  pointer-events: none;
+}
+
+.instrument-strip {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(92px, 1fr));
+  width: min(250px, calc(100vw - 36px));
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid rgba(148, 192, 212, 0.28);
+  border-radius: 8px;
+  background: rgba(7, 11, 13, 0.82);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(8px);
+}
+
+.instrument-strip div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 8px 10px;
+  border-right: 1px solid rgba(148, 192, 212, 0.16);
+}
+
+.instrument-strip div:nth-child(2n) {
+  border-right: 0;
+}
+
+.instrument-strip div:nth-child(-n + 2) {
+  border-bottom: 1px solid rgba(148, 192, 212, 0.16);
+}
+
+.instrument-strip dt,
+.instrument-strip dd {
+  margin: 0;
+}
+
+.instrument-strip dt {
+  color: rgba(169, 199, 214, 0.68);
+  font-size: 10px;
+}
+
+.instrument-strip dd {
+  color: #f1fbff;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+@media (max-width: 600px) {
+  .underwater-status {
+    top: 10px;
+    right: 10px;
+  }
+
+  .instrument-strip {
+    width: min(220px, calc(100vw - 20px));
+  }
+}
