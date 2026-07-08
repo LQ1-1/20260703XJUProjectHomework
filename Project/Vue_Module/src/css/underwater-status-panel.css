@@ -1,24 +1,35 @@
 .underwater-status {
   position: absolute;
-  top: 18px;
-  right: 18px;
   z-index: 5;
+  overflow: hidden;
+  border: 1px solid rgba(148, 192, 212, 0.28);
+  border-radius: 8px;
+  background: rgba(7, 11, 13, 0.72);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(8px);
   color: rgba(235, 248, 255, 0.94);
   font-family: Inter, system-ui, sans-serif;
   pointer-events: none;
 }
 
+.underwater-status--compact {
+  bottom: 18px;
+  left: 18px;
+  width: min(380px, calc(100vw - 36px));
+  background: rgba(7, 11, 13, 0.82);
+}
+
+.underwater-status--full {
+  top: 50%;
+  left: 50%;
+  width: min(760px, calc(100vw - 48px));
+  transform: translate(-50%, -50%);
+}
+
 .instrument-strip {
   display: grid;
   grid-template-columns: repeat(2, minmax(92px, 1fr));
-  width: min(250px, calc(100vw - 36px));
   margin: 0;
-  overflow: hidden;
-  border: 1px solid rgba(148, 192, 212, 0.28);
-  border-radius: 8px;
-  background: rgba(7, 11, 13, 0.82);
-  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.28);
-  backdrop-filter: blur(8px);
 }
 
 .instrument-strip div {
@@ -34,6 +45,11 @@
 }
 
 .instrument-strip div:nth-child(-n + 2) {
+  border-bottom: 1px solid rgba(148, 192, 212, 0.16);
+}
+
+.instrument-strip div:nth-child(3),
+.instrument-strip div:nth-child(4) {
   border-bottom: 1px solid rgba(148, 192, 212, 0.16);
 }
 
@@ -54,13 +70,73 @@
   white-space: nowrap;
 }
 
+.underwater-status--full .instrument-strip {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.underwater-status--full .instrument-strip div {
+  min-height: 76px;
+  align-content: center;
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(148, 192, 212, 0.16);
+}
+
+.underwater-status--full .instrument-strip div:nth-child(2n) {
+  border-right: 1px solid rgba(148, 192, 212, 0.16);
+}
+
+.underwater-status--full .instrument-strip div:last-child {
+  border-right: 0;
+}
+
+.underwater-status--full .instrument-strip dt {
+  font-size: 11px;
+}
+
+.underwater-status--full .instrument-strip dd {
+  overflow: hidden;
+  font-size: 18px;
+  text-overflow: ellipsis;
+}
+
+.underwater-status--full .bearing-compass-panel {
+  gap: 18px;
+  padding: 18px;
+}
+
+.underwater-status--full .bearing-dial {
+  width: clamp(128px, 16vw, 170px);
+}
+
 @media (max-width: 600px) {
-  .underwater-status {
-    top: 10px;
-    right: 10px;
+  .underwater-status--compact {
+    bottom: 10px;
+    left: 10px;
+    width: min(300px, calc(100vw - 20px));
   }
 
-  .instrument-strip {
-    width: min(220px, calc(100vw - 20px));
+  .underwater-status--full {
+    width: min(340px, calc(100vw - 20px));
+  }
+
+  .underwater-status--full .instrument-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .underwater-status--full .instrument-strip div {
+    min-height: 0;
+    padding: 9px 10px;
+  }
+
+  .underwater-status--full .instrument-strip div:nth-child(2n) {
+    border-right: 0;
+  }
+
+  .underwater-status--full .instrument-strip div:last-child {
+    grid-column: 1 / -1;
+  }
+
+  .underwater-status--full .instrument-strip dd {
+    font-size: 13px;
   }
 }

@@ -1,10 +1,13 @@
 <script setup lang="ts">
+import BearingCompassPanel from './BearingCompassPanel.vue'
 import '../../css/underwater-status-panel.css'
 
 defineProps<{
+  mode: 'full' | 'compact'
   depthMeters: number
   speedKnots: number
   headingDegrees: number
+  periscopeRelativeBearingDegrees: number
   navigationState: string
 
   submarineWorldX: number
@@ -13,7 +16,7 @@ defineProps<{
 </script>
 
 <template>
-  <aside class="underwater-status" aria-label="航行信息">
+  <aside class="underwater-status" :class="`underwater-status--${mode}`" aria-label="航行信息">
     <dl class="instrument-strip">
       <div>
         <dt>潜深</dt>
@@ -33,12 +36,13 @@ defineProps<{
       </div>
       <div>
         <dt>世界坐标-测试使用</dt>
-        <dd>坐标:{{submarineWorldX}},{{submarineWorldZ}}</dd>
-      </div>
-      <div>
-        <dt>潜望镜相对方位</dt>
-        <dd></dd>
+        <dd>坐标:{{ submarineWorldX.toFixed(1) }},{{ submarineWorldZ.toFixed(1) }}</dd>
       </div>
     </dl>
+
+    <BearingCompassPanel
+      :heading-degrees="headingDegrees"
+      :periscope-relative-bearing-degrees="periscopeRelativeBearingDegrees"
+    />
   </aside>
 </template>
