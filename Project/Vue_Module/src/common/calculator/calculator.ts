@@ -3,7 +3,7 @@
 
 
 
-class TorpedoFireControlComputerParameter{
+export class TorpedoFireControlComputerParameter{
 
     public AOB: number;
     public Distance: number;
