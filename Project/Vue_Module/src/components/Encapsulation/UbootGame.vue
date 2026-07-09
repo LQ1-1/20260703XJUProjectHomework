@@ -155,7 +155,11 @@ onMounted(async () => {
     // 潜艇
     submarine = await SubmarineController.create(engine, input, cameraCtrl, {
       id: uuidv4(), //使用uuid作为模型编号
-      coordinateCode: 'AD16',
+      // coordinateCode: 'AD16',
+      worldPosition: {
+        x: 1000,
+        z: 550
+      },
       initialHeadingDegrees: 180,
       initialDepthMeters: 0,
       isPlayerControlled: true,

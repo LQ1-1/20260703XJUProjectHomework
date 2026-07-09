@@ -24,7 +24,12 @@ import { CARGO_MODEL_LENGTH_SCENE, CARGO_SURFACE_MODEL_OFFSET, METERS_TO_SCENE }
 
 export interface CargoShipOptions {
   /** 地图坐标代码，如 "BE21" */
-  coordinateCode: string
+  coordinateCode?: string
+  /** 地图坐标（数字）  */
+  worldPosition?: {
+    x: number
+    z: number
+  }
   /** 初始航向（罗盘度数，0=北，90=东） */
   headingDegrees: number
   /** 航速（节） */
@@ -59,10 +64,23 @@ export class CargoShipController implements Updatable {
     options: CargoShipOptions,
   ): Promise<CargoShipController> {
     // 1. 坐标代码 → 世界坐标
-    const mapCode = new MapCode(0, 0)
-    const worldPos = mapCode.getWorldLocation(options.coordinateCode)
-    // myPair.first=X, second=Z, 返回的是网格左下角，居中偏移半个 level3
-    const initialPosition = new THREE.Vector3(worldPos.first, 0, worldPos.second)
+
+    // const mapCode = new MapCode(0, 0)
+    // const worldPos = mapCode.getWorldLocation(options.coordinateCode)
+    // const initialPosition = new THREE.Vector3(worldPos.first, 0, worldPos.second)
+
+    //2026-07-09 兼容传入世界坐标的初始化方式
+    let initialPosition: THREE.Vector3
+    if (options.worldPosition) {
+      initialPosition = new THREE.Vector3(options.worldPosition.x, 0, options.worldPosition.z)
+    } else if (options.coordinateCode) {
+      const mapCode = new MapCode(0, 0)
+      const worldPos = mapCode.getWorldLocation(options.coordinateCode)
+      initialPosition = new THREE.Vector3(worldPos.first, 0, worldPos.second)
+    } else {
+      throw new Error('SubmarineOptions requires either coordinateCode or worldPosition',)
+    }
+
 
     // 2. 罗盘航向 → Three.js 弧度
     const headingRad = THREE.MathUtils.degToRad(90 - options.headingDegrees)

@@ -17,10 +17,11 @@ import { normalizeSubmarine, disposeObject } from '../modules/modelUtils'
 import { MODEL_LENGTH_SCENE, METERS_TO_SCENE } from '../constant/sceneUnits'
 
 /** 鱼雷最大存活时间（秒） */
-const TORPEDO_MAX_LIFETIME = 1800
+const TORPEDO_MAX_LIFETIME = 480 //G7e鱼雷的动力有效维持时间是5~8分钟
 /** 鱼雷航速（场景单位/秒，约 30 节） */
 const TORPEDO_SPEED = (55_600 * METERS_TO_SCENE) / 3600
 
+//鱼雷只支持传世界坐标作为初始化
 export interface TorpedoOptions {
   initialPosition: THREE.Vector3
   heading: number

@@ -44,7 +44,12 @@ export interface SubmarineOptions {
   /** 唯一标识（用于多潜艇管理、HUD 等） */
   id: string
   /** 地图坐标代码，如 "AD16"，通过 MapCode 转换为世界坐标 */
-  coordinateCode: string
+  coordinateCode?: string
+  /** 地图坐标（数字）  */
+  worldPosition?: {
+    x: number
+    z: number
+  }
   /** 初始航向（罗盘度数，0=北，90=东） */
   initialHeadingDegrees: number
   /** 初始深度（米） */
@@ -122,10 +127,23 @@ export class SubmarineController implements Updatable {
     cameraCtrl: CameraController,
     options: SubmarineOptions,
   ): Promise<SubmarineController> {
-    // 1. 坐标代码 → 世界坐标
-    const mapCode = new MapCode(0, 0)
-    const worldPos = mapCode.getWorldLocation(options.coordinateCode)
-    const initialPosition = new THREE.Vector3(worldPos.first, 0, worldPos.second)
+    // 1. 坐标代码/世界坐标 → 世界坐标
+    // const mapCode = new MapCode(0, 0)
+    // const worldPos = mapCode.getWorldLocation(options.coordinateCode)
+    // const initialPosition = new THREE.Vector3(worldPos.first, 0, worldPos.second)
+
+    //2026-07-09 LQH: 兼容直接传入数字世界坐标
+    let initialPosition: THREE.Vector3
+    if (options.worldPosition) {
+      initialPosition = new THREE.Vector3(options.worldPosition.x, 0, options.worldPosition.z)
+    } else if (options.coordinateCode) {
+      const mapCode = new MapCode(0, 0)
+      const worldPos = mapCode.getWorldLocation(options.coordinateCode)
+      initialPosition=new THREE.Vector3(worldPos.first, 0 , worldPos.second)
+    }else{
+      throw new Error('SubmarineOptions requires either coordinateCode or worldPositon')
+    }
+
 
     // 2. 罗盘航向 → 弧度（罗盘 0°=世界 -Z，90°=世界 +X）
     const headingRad = THREE.MathUtils.degToRad(90 - options.initialHeadingDegrees)
@@ -289,7 +307,7 @@ export class SubmarineController implements Updatable {
     const diveInput = isAiming
       ? 0
       : (this.input.pressedKeys.has('KeyL') ? 1 : 0) -
-        (this.input.pressedKeys.has('KeyK') ? 1 : 0)
+      (this.input.pressedKeys.has('KeyK') ? 1 : 0)
 
     if (diveInput !== 0) {
       this.targetDepth = THREE.MathUtils.clamp(
@@ -335,7 +353,7 @@ export class SubmarineController implements Updatable {
   updateHorizontalMovement(delta: number): void {
     const throttle = this.isPlayerControlled
       ? (this.input.pressedKeys.has('KeyW') ? 1 : 0) -
-        (this.input.pressedKeys.has('KeyS') ? 1 : 0)
+      (this.input.pressedKeys.has('KeyS') ? 1 : 0)
       : 0
 
     const maxForwardSpeed = this.currentForwardSpeedLimit()
@@ -372,7 +390,7 @@ export class SubmarineController implements Updatable {
 
     const turnInput = this.isPlayerControlled
       ? (this.input.pressedKeys.has('KeyA') ? 1 : 0) -
-        (this.input.pressedKeys.has('KeyD') ? 1 : 0)
+      (this.input.pressedKeys.has('KeyD') ? 1 : 0)
       : 0
 
     if (turnInput !== 0 && Math.abs(this.currentSpeed) > 0.0001) {
@@ -469,12 +487,12 @@ export class SubmarineController implements Updatable {
     })
   }
 
-  getTorpedorCount(){
+  getTorpedorCount() {
     return this.torpedorCount;
   }
 
-  setTorpedorCount(newTorpedorCount: number){
-    this.torpedorCount=newTorpedorCount
+  setTorpedorCount(newTorpedorCount: number) {
+    this.torpedorCount = newTorpedorCount
   }
 
   // ==================== 清理 ====================
