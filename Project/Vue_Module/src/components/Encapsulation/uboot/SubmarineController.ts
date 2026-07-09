@@ -93,6 +93,9 @@ export class SubmarineController implements Updatable {
   private depthLimitWasActive = false
   private _sampledWaterHeight = 0
 
+  // ---- 鱼雷数量 ----
+  private torpedorCount: number = 14; //鱼雷数量固定14发
+
   // ---- HUD 回调（由 Vue 组件注入） ----
   onHudUpdate?: (data: {
     speedKmh: number
@@ -464,6 +467,14 @@ export class SubmarineController implements Updatable {
       worldZ: this.root.position.z,
       isSubmerged: this.depthMeters > 0,
     })
+  }
+
+  getTorpedorCount(){
+    return this.torpedorCount;
+  }
+
+  setTorpedorCount(newTorpedorCount: number){
+    this.torpedorCount=newTorpedorCount
   }
 
   // ==================== 清理 ====================
