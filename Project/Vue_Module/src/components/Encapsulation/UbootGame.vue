@@ -10,6 +10,7 @@ import { SubmarineController } from './uboot/SubmarineController'
 import { CargoShipController } from './cargoship/CargoShipController'
 import { OceanController } from './ocean/OceanController'
 import { tuneSunMaterials, disposeObject } from './modules/modelUtils'
+import { HitDetectSystem } from './modules/hitdetect'
 import UnderwaterStatusPanel from './panel/UnderwaterStatusPanel.vue'
 
 import submarineUrl from '../../model/type_vii_d_u-boat.glb?url'
@@ -18,7 +19,7 @@ import sunUrl from '../../model/sun.glb?url'
 import periscopeSightUrl from '../../assets/Uboot Periscope sight/UBootPeriscopeAimingSight.png?url'
 import '../../css/test-3d-programized-ocean.css'
 
-import { v4 as uuidv4, v1 as uuidv1, validate } from 'uuid';
+import { v4 as uuidv4 } from 'uuid'
 
 // -------------------- 海洋配置 --------------------
 const OCEAN_SIZE = 1200
@@ -77,6 +78,7 @@ let cameraCtrl: CameraController | undefined
 let submarine: SubmarineController | undefined
 let cargoShips: CargoShipController[] = []
 let ocean: OceanController | undefined
+let hitDetect: HitDetectSystem | undefined
 let sunModel: THREE.Object3D | undefined
 let hintTimer: ReturnType<typeof setTimeout> | undefined
 let noticeTimer: ReturnType<typeof setTimeout> | undefined
@@ -183,7 +185,14 @@ onMounted(async () => {
     // 货船（AI 水面航行）
     cargoShips.push(
       await CargoShipController.create(engine, {
-        coordinateCode: 'AD43',
+        id: uuidv4(),
+        // coordinateCode: 'AD43',
+
+        worldPosition: {
+        x: 1000,
+        z: 650
+        },
+
         headingDegrees: 90,
         speedKnots: 0,
         modelUrl: cargoshipUrl,
@@ -196,9 +205,15 @@ onMounted(async () => {
       engine.addUpdatable(ship)
     }
 
-    // Q 键：瞄准切换
+    //注册碰撞检测
+    hitDetect = new HitDetectSystem({ scene: engine.scene })
+    hitDetect.registerSubmarine(submarine)
+    hitDetect.registerCargoShips(cargoShips)
+    engine.addUpdatable(hitDetect)
+
+    // F 键：瞄准切换
     input.onAction = (code, pressed) => {
-      if (code === 'KeyQ' && pressed && submarine && cameraCtrl) {
+      if (code === 'KeyF' && pressed && submarine && cameraCtrl) {
         const msg = cameraCtrl.toggleAiming(submarine)
         if (msg) showLimitNotice(msg)
       }
@@ -240,6 +255,10 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   if (hintTimer) clearTimeout(hintTimer)
   if (noticeTimer) clearTimeout(noticeTimer)
+  if (hitDetect && engine) {
+    engine.removeUpdatable(hitDetect)
+    hitDetect.clear()
+  }
   submarine?.dispose()
   for (const ship of cargoShips) ship.dispose()
   cargoShips = []
@@ -302,7 +321,7 @@ onBeforeUnmount(() => {
     <!-- 操作提示 -->
     <Transition name="hint">
       <p v-if="showHint && !isSubmerged" class="control-hint">
-        W/S 前进倒退 · A/D 转向 · K 上浮 · L 下潜 · 鼠标观察
+        W/S 前进倒退 · A/D 转向 · K 上浮 · L 下潜 · F 瞄准观察
       </p>
     </Transition>
 

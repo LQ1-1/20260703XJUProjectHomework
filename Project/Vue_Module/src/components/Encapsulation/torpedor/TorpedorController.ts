@@ -13,6 +13,8 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import type { Updatable } from '../engine/GameEngine'
+import type { CollisionEntitySnapshot, CollisionEvent } from '../modules/hitdetect'
+import { CollisionDecision, CollisionSituationType } from '../modules/hitdetect.ts'
 import { normalizeSubmarine, disposeObject } from '../modules/modelUtils'
 import { MODEL_LENGTH_SCENE, METERS_TO_SCENE } from '../constant/sceneUnits'
 
@@ -23,6 +25,8 @@ const TORPEDO_SPEED = (55_600 * METERS_TO_SCENE) / 3600
 
 //鱼雷只支持传世界坐标作为初始化
 export interface TorpedoOptions {
+  id: string
+  ownerId: string  //鱼雷的发射方
   initialPosition: THREE.Vector3
   heading: number
   depth?: number
@@ -30,8 +34,12 @@ export interface TorpedoOptions {
 }
 
 export class TorpedorController implements Updatable {
+  public readonly id: string
+  public readonly ownerId: string | undefined
   public readonly root: THREE.Group
   public readonly visual: THREE.Object3D
+  public readonly modelLength: number
+  public readonly modelHeight: number
 
   public heading: number
   public currentSpeed: number
@@ -41,12 +49,18 @@ export class TorpedorController implements Updatable {
   private movementDelta = new THREE.Vector3()
 
   constructor(
+    id: string,
+    ownerId: string | undefined,
     root: THREE.Group,
     visual: THREE.Object3D,
-    options: { heading: number; speed: number; depth: number },
+    options: { heading: number; speed: number; depth: number; modelLength: number; modelHeight: number },
   ) {
+    this.id = id
+    this.ownerId = ownerId
     this.root = root
     this.visual = visual
+    this.modelLength = options.modelLength
+    this.modelHeight = options.modelHeight
     this.heading = options.heading
     this.currentSpeed = options.speed
     this.depth = options.depth
@@ -79,12 +93,17 @@ export class TorpedorController implements Updatable {
       }
     })
 
+    const bbox = new THREE.Box3().setFromObject(visual)
+    const modelSize = bbox.getSize(new THREE.Vector3())
+
     root.add(visual)
 
-    return new TorpedorController(root, visual, {
+    return new TorpedorController(options.id, options.ownerId, root, visual, {
       heading: options.heading,
       speed: TORPEDO_SPEED,
       depth: options.depth ?? 0,
+      modelLength: modelSize.x,
+      modelHeight: modelSize.y,
     })
   }
 
@@ -105,6 +124,42 @@ export class TorpedorController implements Updatable {
     this.root.position.add(this.movementDelta)
     // 深度固定
     this.root.position.y = -this.depth
+  }
+
+  handleCollision(_event: CollisionEvent, self: CollisionEntitySnapshot): void {
+    // console.log(`[collision:${self.type}] ${self.id}`)
+
+    //碰撞情景
+    let CollisionSituation: CollisionSituationType
+    CollisionSituation = CollisionDecision(_event)
+
+    switch (CollisionSituation) {
+      case CollisionSituationType.Submarine_Hits_Submarine:
+        break
+
+
+      case CollisionSituationType.Submarine_Hits_Cargoship:
+        break
+
+
+      case CollisionSituationType.Cargoship_Hits_Cargoship:
+        break
+
+
+      case CollisionSituationType.Torpedor_Hits_Submarine:
+        //击沉一艘潜艇
+        //上传击沉记录
+        break
+
+      case CollisionSituationType.Torpedor_Hits_Cargoship:
+        //击沉一艘商船
+        //上传击沉记录
+        break
+
+
+    }
+
+
   }
 
   dispose(): void {

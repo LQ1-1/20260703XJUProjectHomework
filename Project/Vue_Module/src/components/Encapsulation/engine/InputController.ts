@@ -2,15 +2,15 @@
  * InputController — 统一键盘/指针输入管理
  *
  * 职责：
- * - 追踪当前按下的按键（WASD 移动、KL 深度、Q 瞄准切换）
+ * - 追踪当前按下的按键（WASD 移动、KL 深度、F 瞄准切换）
  * - 管理潜望镜瞄准时的指针拖拽
  * - 窗口失焦时自动清空按键状态（避免松键在窗口外导致持续移动）
  * - 可编辑目标检测（避免在 input/textarea 中打字时触发游戏操作）
  */
-export type GameControlCode = 'KeyW' | 'KeyA' | 'KeyS' | 'KeyD' | 'KeyK' | 'KeyL' | 'KeyQ'
+export type GameControlCode = 'KeyW' | 'KeyA' | 'KeyS' | 'KeyD' | 'KeyK' | 'KeyL' | 'KeyQ' | 'KeyE' | 'KeyF' | 'Space'
 
 const CONTROL_CODES = new Set<string>([
-  'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyK', 'KeyL', 'KeyQ',
+  'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyK', 'KeyL', 'KeyQ', 'KeyE', 'KeyF', 'Space'
 ])
 
 export class InputController {

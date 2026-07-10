@@ -21,6 +21,8 @@ import type { Updatable } from '../engine/GameEngine'
 import type { GameEngine } from '../engine/GameEngine'
 import type { InputController } from '../engine/InputController'
 import type { CameraController } from '../engine/CameraController'
+import type { CollisionEntitySnapshot, CollisionEvent } from '../modules/hitdetect'
+import { CollisionDecision, CollisionSituationType } from '../modules/hitdetect.ts'
 import { moveTowards } from '../modules/mathUtils'
 import { normalizeSubmarine, tuneSubmarineMaterials, disposeObject } from '../modules/modelUtils'
 import { normalizeDegrees, yawToCompassDegrees } from '../modules/navigationMath'
@@ -493,6 +495,46 @@ export class SubmarineController implements Updatable {
 
   setTorpedorCount(newTorpedorCount: number) {
     this.torpedorCount = newTorpedorCount
+  }
+
+  handleCollision(_event: CollisionEvent, self: CollisionEntitySnapshot): void {
+    // console.log(`[collision:${self.type}] ${self.id}`)
+
+    //TEST
+    // console.log(`Hi! This is U-822! a type: ${_event.a.type}, b type: ${_event.b.type}`)
+
+        //碰撞情景
+        let CollisionSituation: CollisionSituationType
+        CollisionSituation=CollisionDecision(_event)
+        
+        switch(CollisionSituation){
+          case CollisionSituationType.Submarine_Hits_Submarine:
+            //两艇停船
+            this.currentSpeed=0
+            break
+
+          case CollisionSituationType.Submarine_Hits_Cargoship:
+            //潜艇停船，商船不变
+            this.currentSpeed=0
+            break
+    
+          case CollisionSituationType.Cargoship_Hits_Cargoship:
+            break
+    
+    
+          case CollisionSituationType.Torpedor_Hits_Submarine:
+            //潜艇被击沉
+            //播放爆炸动画
+            /********/
+            break
+    
+          case CollisionSituationType.Torpedor_Hits_Cargoship:
+            break
+    
+    
+    
+        }
+
   }
 
   // ==================== 清理 ====================

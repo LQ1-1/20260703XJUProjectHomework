@@ -170,5 +170,5 @@ export class MapCode {
 }
 
 
-let test2=new MapCode(0,0);
-console.log(`1000, 550对应的Code是AD16,经过转换: ${test2.getWorldLocation('AD16').first}, ${test2.getWorldLocation('AD16').second}`);
+// let test2=new MapCode(0,0);
+// console.log(`1000, 550对应的Code是AD16,经过转换: ${test2.getWorldLocation('AD16').first}, ${test2.getWorldLocation('AD16').second}`);

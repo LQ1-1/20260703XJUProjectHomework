@@ -18,11 +18,16 @@ import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import type { Updatable } from '../engine/GameEngine'
 import type { GameEngine } from '../engine/GameEngine'
+import type { CollisionEntitySnapshot, CollisionEvent } from '../modules/hitdetect'
+import { CollisionDecision, CollisionSituationType } from '../modules/hitdetect.ts'
 import { normalizeSubmarine, disposeObject } from '../modules/modelUtils'
 import { MapCode } from '../../../common/map/mapcode'
 import { CARGO_MODEL_LENGTH_SCENE, CARGO_SURFACE_MODEL_OFFSET, METERS_TO_SCENE } from '../constant/sceneUnits'
+import type { Break } from 'three/tsl'
 
 export interface CargoShipOptions {
+  /** 唯一标识（用于碰撞、战役状态同步等） */
+  id: string
   /** 地图坐标代码，如 "BE21" */
   coordinateCode?: string
   /** 地图坐标（数字）  */
@@ -39,6 +44,7 @@ export interface CargoShipOptions {
 }
 
 export class CargoShipController implements Updatable {
+  public readonly id: string
   public readonly root: THREE.Group
   public readonly visual: THREE.Object3D
 
@@ -132,12 +138,21 @@ export class CargoShipController implements Updatable {
     // 7. 添加到场景
     engine.scene.add(root)
 
-    return new CargoShipController(root, visual, headingRad, speedScene, modelSize.x, modelSize.y)
+    return new CargoShipController(
+      options.id,
+      root,
+      visual,
+      headingRad,
+      speedScene,
+      modelSize.x,
+      modelSize.y,
+    )
   }
 
   // ==================== 构造函数 ====================
 
   constructor(
+    id: string,
     root: THREE.Group,
     visual: THREE.Object3D,
     heading: number,
@@ -145,6 +160,7 @@ export class CargoShipController implements Updatable {
     modelLength: number,
     modelHeight: number,
   ) {
+    this.id = id
     this.root = root
     this.visual = visual
     this.heading = heading
@@ -177,6 +193,53 @@ export class CargoShipController implements Updatable {
   /** 标记被摧毁 */
   destroy(): void {
     this.isDestroyed = true
+  }
+
+  handleCollision(_event: CollisionEvent, self: CollisionEntitySnapshot): void {
+    // console.log(`[collision:${self.type}] ${self.id}`)
+
+    //Test
+    // console.log(`Hi this carship! a type: ${_event.a.type}, b type: ${_event.b.type}`)
+
+
+    //碰撞情景
+    let CollisionSituation: CollisionSituationType
+    CollisionSituation=CollisionDecision(_event)
+    
+    switch(CollisionSituation){
+      case CollisionSituationType.Submarine_Hits_Submarine:
+        break
+
+
+      case CollisionSituationType.Submarine_Hits_Cargoship:
+        //货船航向航速不变
+        break
+
+      case CollisionSituationType.Cargoship_Hits_Cargoship:
+
+        //停船，并反向行驶
+        this.currentSpeed=0
+        this.heading=this.heading*-1
+        break
+
+      case CollisionSituationType.Torpedor_Hits_Submarine:
+        break
+
+
+      case CollisionSituationType.Torpedor_Hits_Cargoship:
+
+        //货船被击沉
+        this.currentSpeed=0
+        //在被击中的那一次播放爆炸动画
+        /***********/
+        break
+
+      default:
+        break
+
+    }
+
+
   }
 
   /** 释放资源 */
