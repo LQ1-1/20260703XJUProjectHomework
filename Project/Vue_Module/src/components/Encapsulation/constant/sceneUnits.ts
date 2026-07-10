@@ -19,6 +19,7 @@ export const CARGO_MODEL_LENGTH_SCENE = (CARGO_MODEL_LENGTH_METERS / MODEL_LENGT
 /** 货船吃水偏移量：货船船体浸入水中较深，需正向偏移使甲板与水面平齐 */
 export const CARGO_SURFACE_MODEL_OFFSET = -6.5
 
+
 // -------------------- 深度 --------------------
 
 export const MAX_DEPTH_METERS = 280
@@ -26,6 +27,9 @@ export const MAX_DEPTH_METERS = 280
 export const MAX_DEPTH_SCENE = MAX_DEPTH_METERS * METERS_TO_SCENE
 
 export const SURFACE_DEPTH_EPSILON_SCENE = 0.02
+
+/** 货船,潜艇被击沉后要下沉到 该深度 */
+export const SINK_DEPTH = 1200
 
 // -------------------- 垂直速度 --------------------
 

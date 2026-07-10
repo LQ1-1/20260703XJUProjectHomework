@@ -17,16 +17,16 @@
  */
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
-import type { Updatable } from '../engine/GameEngine'
-import type { GameEngine } from '../engine/GameEngine'
-import type { InputController } from '../engine/InputController'
-import type { CameraController } from '../engine/CameraController'
-import type { CollisionEntitySnapshot, CollisionEvent } from '../modules/hitdetect'
+import type { Updatable } from '../engine/GameEngine.ts'
+import type { GameEngine } from '../engine/GameEngine.ts'
+import type { InputController } from '../engine/InputController.ts'
+import type { CameraController } from '../engine/CameraController.ts'
+import type { CollisionEntitySnapshot, CollisionEvent } from '../modules/hitdetect.ts'
 import { CollisionDecision, CollisionSituationType } from '../modules/hitdetect.ts'
-import { moveTowards } from '../modules/mathUtils'
-import { normalizeSubmarine, tuneSubmarineMaterials, disposeObject } from '../modules/modelUtils'
-import { normalizeDegrees, yawToCompassDegrees } from '../modules/navigationMath'
-import { MapCode } from '../../../common/map/mapcode'
+import { moveTowards } from '../modules/mathUtils.ts'
+import { normalizeSubmarine, tuneSubmarineMaterials, disposeObject } from '../modules/modelUtils.ts'
+import { normalizeDegrees, yawToCompassDegrees } from '../modules/navigationMath.ts'
+import { MapCode } from '../../../common/map/mapcode.ts'
 import {
   MAX_DEPTH_SCENE,
   MAX_TURN_RATE,
@@ -40,7 +40,10 @@ import {
   METERS_TO_SCENE,
   MODEL_LENGTH_SCENE,
   SURFACE_MODEL_OFFSET,
-} from '../constant/sceneUnits'
+} from '../constant/sceneUnits.ts'
+import { ExplosionSplashEffect } from '../ExplosionSplashEffect/explosionSplashEffect.ts'
+import { GameEntityRegistry } from '../entitymanager/GameEntityRegistry.ts'
+
 
 export interface SubmarineOptions {
   /** 唯一标识（用于多潜艇管理、HUD 等） */
@@ -60,6 +63,9 @@ export interface SubmarineOptions {
   isPlayerControlled: boolean
   /** GLB 模型文件路径 */
   modelUrl: string
+
+  /** 模型管理对象 */
+  entityRegistry: GameEntityRegistry
 }
 
 const PERISCOPE_MOUSE_SENSITIVITY = 0.004
@@ -77,6 +83,9 @@ export class SubmarineController implements Updatable {
   // ---- Three.js 节点 ----
   public readonly root: THREE.Group
   public visual!: THREE.Object3D
+
+  /** 保存模型管理对象 */
+  private readonly entityRegistry: GameEntityRegistry
 
   // ---- 运动状态 ----
   public heading = 0
@@ -102,6 +111,9 @@ export class SubmarineController implements Updatable {
 
   // ---- 鱼雷数量 ----
   private torpedorCount: number = 14; //鱼雷数量固定14发
+
+  //---- 是否被击沉 ----
+  private isDestroyed=false
 
   // ---- HUD 回调（由 Vue 组件注入） ----
   onHudUpdate?: (data: {
@@ -172,7 +184,16 @@ export class SubmarineController implements Updatable {
 
     // 6. 注册到引擎更新循环
     const controller = new SubmarineController(
-      engine, input, cameraCtrl, root, visual, options, modelSize.x, modelSize.y,
+      engine, 
+      input, 
+      cameraCtrl, 
+      root, 
+      visual, 
+      options, 
+      modelSize.x,
+      modelSize.y,
+
+      options.entityRegistry
     )
     engine.addUpdatable(controller)
 
@@ -180,6 +201,13 @@ export class SubmarineController implements Updatable {
     if (options.isPlayerControlled) {
       cameraCtrl.initDefaultPosition(root.position)
     }
+
+    //8.向模型管理器注册模型
+    options.entityRegistry.register({
+      id: options.id,
+      type: 'submarine',
+      root: root
+    })
 
     return controller
   }
@@ -195,6 +223,7 @@ export class SubmarineController implements Updatable {
     options: SubmarineOptions,
     modelLength: number,
     modelHeight: number,
+    entityRegistry: GameEntityRegistry
   ) {
     this.engine = engine
     this.input = input
@@ -205,6 +234,8 @@ export class SubmarineController implements Updatable {
     this.isPlayerControlled = options.isPlayerControlled
     this.modelLength = modelLength
     this.modelHeight = modelHeight
+
+    this.entityRegistry=entityRegistry
 
     // 初始航向由 root.rotation.y 决定（已在工厂中设置）
     this.heading = root.rotation.y
@@ -510,12 +541,13 @@ export class SubmarineController implements Updatable {
         switch(CollisionSituation){
           case CollisionSituationType.Submarine_Hits_Submarine:
             //两艇停船
-            this.currentSpeed=0
+            this.currentSpeed=-1.5
             break
 
           case CollisionSituationType.Submarine_Hits_Cargoship:
             //潜艇停船，商船不变
-            this.currentSpeed=0
+            this.currentSpeed=-1.5
+
             break
     
           case CollisionSituationType.Cargoship_Hits_Cargoship:
@@ -524,8 +556,14 @@ export class SubmarineController implements Updatable {
     
           case CollisionSituationType.Torpedor_Hits_Submarine:
             //潜艇被击沉
+            this.currentSpeed=0
+            this.isDestroyed=true
+
             //播放爆炸动画
             /********/
+
+            //向后端更新Wolfpack信息，该潜艇已被击沉
+
             break
     
           case CollisionSituationType.Torpedor_Hits_Cargoship:
@@ -540,8 +578,25 @@ export class SubmarineController implements Updatable {
   // ==================== 清理 ====================
 
   dispose(): void {
+    this.entityRegistry.unregister(this.id)
     this.engine.removeUpdatable(this)
     this.root.removeFromParent()
     disposeObject(this.visual)
   }
 }
+
+
+
+/*
+爆炸效果使用方式
+
+const effect = new ExblowEffect(position)
+
+effect.onFinished = (finishedEffect) => {
+  engine.removeUpdatable(finishedEffect)
+}
+
+engine.scene.add(effect.root)
+engine.addUpdatable(effect)
+
+*/

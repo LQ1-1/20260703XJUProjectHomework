@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import type { Updatable } from '../engine/GameEngine'
-import type { SubmarineController } from '../uboot/SubmarineController'
+import type { SubmarineController } from '../uboat/SubmarineController'
 import type { CargoShipController } from '../cargoship/CargoShipController'
 import type { TorpedorController } from '../torpedor/TorpedorController'
 
@@ -83,7 +83,7 @@ const DEFAULT_OPTIONS: Required<Omit<HitDetectSystemOptions, 'scene'>> = {
 //radiusRatio碰撞包围球的比例系数，越大碰撞范围越宽
 const COLLISION_CONFIG = {
   submarine: {
-    spheresPerLayer: 5,
+    spheresPerLayer: 7,
     yLayerRatio: 0.18,
     radiusRatio: 0.08,
     color: 0x00aaff,
@@ -91,7 +91,7 @@ const COLLISION_CONFIG = {
   cargoShip: {
     spheresPerLayer: 10,
     yLayerRatio: 0.18,
-    radiusRatio: 0.075,
+    radiusRatio: 0.08,
     color: 0xffcc00,
   },
   torpedo: {
@@ -231,10 +231,12 @@ export class HitDetectSystem implements Updatable {
         if (!hit) continue
 
         currentPairs.add(pairKey)
-        if (this.activePairs.has(pairKey)) continue
-
         const event = this.createCollisionEvent(entityA, entityB, hit, pairKey, timeMs, timeSeconds)
-        this.emitCollision(event)
+        if (!this.activePairs.has(pairKey)) {
+          this.emitCollision(event)
+        } else {
+          this.notifyCollisionHandlers(event)
+        }
       }
     }
 
@@ -347,6 +349,10 @@ export class HitDetectSystem implements Updatable {
     }
 
     this.onCollision?.(event)
+    this.notifyCollisionHandlers(event)
+  }
+
+  private notifyCollisionHandlers(event: CollisionEvent): void {
     event.a.controller.handleCollision(event, event.a)
     event.b.controller.handleCollision(event, event.b)
   }

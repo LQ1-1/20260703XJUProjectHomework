@@ -24,6 +24,7 @@ import { normalizeSubmarine, disposeObject } from '../modules/modelUtils'
 import { MapCode } from '../../../common/map/mapcode'
 import { CARGO_MODEL_LENGTH_SCENE, CARGO_SURFACE_MODEL_OFFSET, METERS_TO_SCENE } from '../constant/sceneUnits'
 import type { Break } from 'three/tsl'
+import { GameEntityRegistry } from '../entitymanager/GameEntityRegistry.ts'
 
 export interface CargoShipOptions {
   /** 唯一标识（用于碰撞、战役状态同步等） */
@@ -41,6 +42,9 @@ export interface CargoShipOptions {
   speedKnots: number
   /** GLB 模型文件路径 */
   modelUrl: string
+
+  /** 模型管理对象 */
+  entityRegistry: GameEntityRegistry
 }
 
 export class CargoShipController implements Updatable {
@@ -53,9 +57,12 @@ export class CargoShipController implements Updatable {
   /** 模型归一化后的实际长度（场景单位） */
   public readonly modelLength: number
 
+  /** 保存模型管理对象 */
+  private readonly entityRegistry: GameEntityRegistry
+
   public heading = 0
   public currentSpeed = 0
-  public isDestroyed = false
+  public isDestroyed = false  //商船是否被击沉
 
   private movementDelta = new THREE.Vector3()
 
@@ -138,6 +145,13 @@ export class CargoShipController implements Updatable {
     // 7. 添加到场景
     engine.scene.add(root)
 
+    //8. 向模型管理器注册模型
+    options.entityRegistry.register({
+      id: options.id,
+      type: 'cargoShip',
+      root: root
+    })
+
     return new CargoShipController(
       options.id,
       root,
@@ -146,6 +160,7 @@ export class CargoShipController implements Updatable {
       speedScene,
       modelSize.x,
       modelSize.y,
+      options.entityRegistry,
     )
   }
 
@@ -159,6 +174,7 @@ export class CargoShipController implements Updatable {
     speed: number,
     modelLength: number,
     modelHeight: number,
+    entityRegistry: GameEntityRegistry
   ) {
     this.id = id
     this.root = root
@@ -167,6 +183,7 @@ export class CargoShipController implements Updatable {
     this.currentSpeed = speed
     this.modelLength = modelLength
     this.modelHeight = modelHeight
+    this.entityRegistry=entityRegistry
   }
 
   // ==================== 每帧更新 ====================
@@ -230,8 +247,12 @@ export class CargoShipController implements Updatable {
 
         //货船被击沉
         this.currentSpeed=0
+        this.isDestroyed=true
         //在被击中的那一次播放爆炸动画
         /***********/
+
+        //向后端更新Convoy信息，该船被击沉
+
         break
 
       default:
@@ -244,6 +265,7 @@ export class CargoShipController implements Updatable {
 
   /** 释放资源 */
   dispose(): void {
+    this.entityRegistry.unregister(this.id)
     this.root.removeFromParent()
     disposeObject(this.visual)
   }

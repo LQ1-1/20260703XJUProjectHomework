@@ -9,7 +9,7 @@
  */
 import * as THREE from 'three'
 import type { OrbitControls } from 'three/addons/controls/OrbitControls.js'
-import type { SubmarineController } from '../uboot/SubmarineController'
+import type { SubmarineController } from '../uboat/SubmarineController'
 import { AimingViewController } from '../aimingsight/AimingViewController'
 import { SURFACE_DEPTH_EPSILON_SCENE, SCENE_TO_METERS } from '../constant/sceneUnits'
 

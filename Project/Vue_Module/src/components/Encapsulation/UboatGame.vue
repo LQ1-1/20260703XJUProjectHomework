@@ -3,14 +3,14 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 
-import { GameEngine } from './engine/GameEngine'
-import { InputController } from './engine/InputController'
-import { CameraController } from './engine/CameraController'
-import { SubmarineController } from './uboot/SubmarineController'
-import { CargoShipController } from './cargoship/CargoShipController'
-import { OceanController } from './ocean/OceanController'
-import { tuneSunMaterials, disposeObject } from './modules/modelUtils'
-import { HitDetectSystem } from './modules/hitdetect'
+import { GameEngine } from './engine/GameEngine.ts'
+import { InputController } from './engine/InputController.ts'
+import { CameraController } from './engine/CameraController.ts'
+import { SubmarineController } from './uboat/SubmarineController.ts'
+import { CargoShipController } from './cargoship/CargoShipController.ts'
+import { OceanController } from './ocean/OceanController.ts'
+import { tuneSunMaterials, disposeObject } from './modules/modelUtils.ts'
+import { HitDetectSystem } from './modules/hitdetect.ts'
 import UnderwaterStatusPanel from './panel/UnderwaterStatusPanel.vue'
 
 import submarineUrl from '../../model/type_vii_d_u-boat.glb?url'
@@ -20,6 +20,11 @@ import periscopeSightUrl from '../../assets/Uboot Periscope sight/UBootPeriscope
 import '../../css/test-3d-programized-ocean.css'
 
 import { v4 as uuidv4 } from 'uuid'
+import { ExplosionSplashEffect } from './ExplosionSplashEffect/explosionSplashEffect.ts'
+import { GameEntityRegistry } from './entitymanager/GameEntityRegistry.ts'
+
+//------本地测试的版本(尚未和后端服务器进行交互)-------//
+
 
 // -------------------- 海洋配置 --------------------
 const OCEAN_SIZE = 1200
@@ -86,6 +91,10 @@ let noticeTimer: ReturnType<typeof setTimeout> | undefined
 // -------------------- 加载进度 --------------------
 const fileProgress = new Map<string, { loaded: number; total: number }>()
 
+// -------------------- 模型管理器 -------------------//
+let entityRegistry: GameEntityRegistry | undefined
+
+
 function updateLoadingProgress(url: string, event: ProgressEvent<EventTarget>) {
   fileProgress.set(url, {
     loaded: event.loaded,
@@ -141,6 +150,9 @@ onMounted(async () => {
   // 5. 加载模型（潜艇 + 太阳，并行）
   const loader = new GLTFLoader()
 
+  //注册 模型控制器
+  entityRegistry = new GameEntityRegistry()
+
   try {
     const [submarineGltf, sunGltf] = await Promise.all([
       loader.loadAsync(submarineUrl, (e) => updateLoadingProgress(submarineUrl, e)),
@@ -155,7 +167,11 @@ onMounted(async () => {
     engine.addSunModel(sunModel)
 
     // 潜艇
-    submarine = await SubmarineController.create(engine, input, cameraCtrl, {
+    //用户操作的潜艇
+    submarine = await SubmarineController.create(
+      engine, 
+      input, 
+      cameraCtrl, {
       id: uuidv4(), //使用uuid作为模型编号
       // coordinateCode: 'AD16',
       worldPosition: {
@@ -166,7 +182,8 @@ onMounted(async () => {
       initialDepthMeters: 0,
       isPlayerControlled: true,
       modelUrl: submarineUrl,
-    })
+      entityRegistry
+      })
 
     // HUD 回调
     submarine.onHudUpdate = (data) => {
@@ -196,9 +213,18 @@ onMounted(async () => {
         headingDegrees: 90,
         speedKnots: 0,
         modelUrl: cargoshipUrl,
+        entityRegistry
       }),
     )
     console.log(`货船高度: ${cargoShips[0]?.modelHeight}`)
+
+    // console.log('爆炸特效测试')
+    // const effectTest=new ExplosionSplashEffect({position: new THREE.Vector3(1000, 0, 640),})
+    // effectTest.onFinished=(finishedEffect)=>{
+    // engine?.removeUpdatable(finishedEffect)
+    // }
+    // engine.scene.add(effectTest.root)
+    // engine.addUpdatable(effectTest)
 
     // 注册到引擎更新循环
     for (const ship of cargoShips) {
@@ -321,7 +347,7 @@ onBeforeUnmount(() => {
     <!-- 操作提示 -->
     <Transition name="hint">
       <p v-if="showHint && !isSubmerged" class="control-hint">
-        W/S 前进倒退 · A/D 转向 · K 上浮 · L 下潜 · F 瞄准观察
+        W/S 前进倒退 · A/D 转向 · K 上浮 · L 下潜 · F 瞄准观察 · 空格发射鱼雷
       </p>
     </Transition>
 

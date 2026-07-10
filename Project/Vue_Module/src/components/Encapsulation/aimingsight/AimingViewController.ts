@@ -2,7 +2,7 @@ import * as THREE from 'three'
 
 import { SCENE_TO_METERS, METERS_TO_SCENE, SURFACE_DEPTH_EPSILON_SCENE } from '../constant/sceneUnits'
 
-import type { SubmarineController } from '../uboot/SubmarineController'
+import type { SubmarineController } from '../uboat/SubmarineController'
 
 export type AimingViewMode = 'none' | 'surfaceAim' | 'periscope'
 

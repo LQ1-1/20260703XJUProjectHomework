@@ -17,6 +17,7 @@ import type { CollisionEntitySnapshot, CollisionEvent } from '../modules/hitdete
 import { CollisionDecision, CollisionSituationType } from '../modules/hitdetect.ts'
 import { normalizeSubmarine, disposeObject } from '../modules/modelUtils'
 import { MODEL_LENGTH_SCENE, METERS_TO_SCENE } from '../constant/sceneUnits'
+import { GameEntityRegistry } from '../entitymanager/GameEntityRegistry.ts'
 
 /** 鱼雷最大存活时间（秒） */
 const TORPEDO_MAX_LIFETIME = 480 //G7e鱼雷的动力有效维持时间是5~8分钟
@@ -31,6 +32,9 @@ export interface TorpedoOptions {
   heading: number
   depth?: number
   modelUrl: string
+
+  /** 模型管理对象 */
+  entityRegistry: GameEntityRegistry
 }
 
 export class TorpedorController implements Updatable {
@@ -40,6 +44,9 @@ export class TorpedorController implements Updatable {
   public readonly visual: THREE.Object3D
   public readonly modelLength: number
   public readonly modelHeight: number
+
+  /** 保存模型管理对象 */
+  private readonly entityRegistry: GameEntityRegistry
 
   public heading: number
   public currentSpeed: number
@@ -54,6 +61,7 @@ export class TorpedorController implements Updatable {
     root: THREE.Group,
     visual: THREE.Object3D,
     options: { heading: number; speed: number; depth: number; modelLength: number; modelHeight: number },
+    entityRegistry: GameEntityRegistry
   ) {
     this.id = id
     this.ownerId = ownerId
@@ -65,6 +73,7 @@ export class TorpedorController implements Updatable {
     this.currentSpeed = options.speed
     this.depth = options.depth
     this.root.rotation.y = this.heading
+    this.entityRegistry = entityRegistry
   }
 
   /** 异步工厂：加载鱼雷模型并创建完整控制器 */
@@ -98,13 +107,21 @@ export class TorpedorController implements Updatable {
 
     root.add(visual)
 
+    //向模型管理器注册模型
+    options.entityRegistry.register({
+      id: options.id,
+      type: 'torpedo',
+      root: root
+    })
+
     return new TorpedorController(options.id, options.ownerId, root, visual, {
       heading: options.heading,
       speed: TORPEDO_SPEED,
       depth: options.depth ?? 0,
       modelLength: modelSize.x,
       modelHeight: modelSize.y,
-    })
+    },
+      options.entityRegistry,)
   }
 
   /** 鱼雷是否已过期（超时或命中销毁） */
@@ -148,12 +165,23 @@ export class TorpedorController implements Updatable {
 
       case CollisionSituationType.Torpedor_Hits_Submarine:
         //击沉一艘潜艇
+        this.currentSpeed = 0
+
+        //播放爆炸动画
+
         //上传击沉记录
+
         break
 
       case CollisionSituationType.Torpedor_Hits_Cargoship:
         //击沉一艘商船
+        this.currentSpeed = 0
+
+        //播放爆炸动画
+
         //上传击沉记录
+
+
         break
 
 
@@ -163,6 +191,7 @@ export class TorpedorController implements Updatable {
   }
 
   dispose(): void {
+    this.entityRegistry.unregister(this.id)
     this.root.removeFromParent()
     disposeObject(this.visual)
   }
