@@ -46,8 +46,11 @@ export class InputController {
     this.onKeyDown = (event: KeyboardEvent) => {
       if (!CONTROL_CODES.has(event.code) || this.isEditableTarget(event.target)) return
       event.preventDefault()
+      const wasPressed = this.pressedKeys.has(event.code)
       this.pressedKeys.add(event.code)
-      this.onAction?.(event.code as GameControlCode, true)
+      if (!wasPressed) {
+        this.onAction?.(event.code as GameControlCode, true)
+      }
     }
     window.addEventListener('keydown', this.onKeyDown)
 

@@ -19,18 +19,48 @@ import { normalizeSubmarine, disposeObject } from '../modules/modelUtils'
 import { MODEL_LENGTH_SCENE, METERS_TO_SCENE } from '../constant/sceneUnits'
 import { GameEntityRegistry } from '../entitymanager/GameEntityRegistry.ts'
 
-/** 鱼雷最大存活时间（秒） */
-const TORPEDO_MAX_LIFETIME = 480 //G7e鱼雷的动力有效维持时间是5~8分钟
-/** 鱼雷航速（场景单位/秒，约 30 节） */
-const TORPEDO_SPEED = (55_600 * METERS_TO_SCENE) / 3600
+
+/** 鱼雷最大存活时间（秒）G7a */
+export const TORPEDO_MAX_LIFETIME_G7A = 220 //G7e鱼雷的动力有效维持时间是3~4分钟
+/** 鱼雷航速（场景单位/秒，约 44 节）G7a */
+export const TORPEDO_SPEED_G7A = (81_500 * METERS_TO_SCENE) / 3600
+
+
+/** 鱼雷最大存活时间（秒）G7e */
+export const TORPEDO_MAX_LIFETIME_G7E = 324 //G7e鱼雷的动力有效维持时间是5~7分钟
+/** 鱼雷航速（场景单位/秒，约 30 节）G7e */
+export const TORPEDO_SPEED_G7E = (55_600 * METERS_TO_SCENE) / 3600
+
+export type TorpedoType = 'G7a' | 'G7e'
+
+interface TorpedoConfig {
+  speed: number
+  maxLifetime: number
+}
+
+const TORPEDO_CONFIGS: Record<TorpedoType, TorpedoConfig> = {
+  G7a: {
+    speed: TORPEDO_SPEED_G7A,
+    maxLifetime: TORPEDO_MAX_LIFETIME_G7A,
+  },
+  G7e: {
+    speed: TORPEDO_SPEED_G7E,
+    maxLifetime: TORPEDO_MAX_LIFETIME_G7E,
+  },
+}
 
 //鱼雷只支持传世界坐标作为初始化
 export interface TorpedoOptions {
   id: string
   ownerId: string  //鱼雷的发射方
+
+  torpedoType: TorpedoType  //鱼雷类型
+
   initialPosition: THREE.Vector3
   heading: number
   depth?: number
+  initialDepth?: number
+  finalDepth?: number
   modelUrl: string
 
   /** 模型管理对象 */
@@ -44,6 +74,8 @@ export class TorpedorController implements Updatable {
   public readonly visual: THREE.Object3D
   public readonly modelLength: number
   public readonly modelHeight: number
+  public readonly torpedoType: TorpedoType
+  public readonly maxLifetime: number
 
   /** 保存模型管理对象 */
   private readonly entityRegistry: GameEntityRegistry
@@ -51,16 +83,31 @@ export class TorpedorController implements Updatable {
   public heading: number
   public currentSpeed: number
   public depth: number
+  public initialDepth: number
+  public finalDepth: number
 
   private age = 0
   private movementDelta = new THREE.Vector3()
+
+  private disposed = false  //判断鱼雷模型是否被清理的标志位
+  private hit=false //判断鱼雷是否命中船只
 
   constructor(
     id: string,
     ownerId: string | undefined,
     root: THREE.Group,
     visual: THREE.Object3D,
-    options: { heading: number; speed: number; depth: number; modelLength: number; modelHeight: number },
+    options: {
+      torpedoType: TorpedoType,
+      heading: number,
+      speed: number,
+      depth: number,
+      initialDepth: number,
+      finalDepth: number,
+      maxLifetime: number,
+      modelLength: number,
+      modelHeight: number
+    },
     entityRegistry: GameEntityRegistry
   ) {
     this.id = id
@@ -72,17 +119,23 @@ export class TorpedorController implements Updatable {
     this.heading = options.heading
     this.currentSpeed = options.speed
     this.depth = options.depth
+    this.initialDepth = options.initialDepth
+    this.finalDepth = options.finalDepth
     this.root.rotation.y = this.heading
     this.entityRegistry = entityRegistry
+    this.torpedoType = options.torpedoType
+    this.maxLifetime = options.maxLifetime
   }
 
   /** 异步工厂：加载鱼雷模型并创建完整控制器 */
   static async create(options: TorpedoOptions): Promise<TorpedorController> {
+    const config = TORPEDO_CONFIGS[options.torpedoType]
+
     const root = new THREE.Group()
     root.position.copy(options.initialPosition)
-    if (options.depth !== undefined) {
-      root.position.y = -options.depth
-    }
+    const initialDepth = options.initialDepth ?? options.depth ?? 0
+    const finalDepth = (options.finalDepth ?? options.depth ?? initialDepth)+3
+    root.position.y = -initialDepth
 
     const loader = new GLTFLoader()
     const gltf = await loader.loadAsync(options.modelUrl)
@@ -115,9 +168,13 @@ export class TorpedorController implements Updatable {
     })
 
     return new TorpedorController(options.id, options.ownerId, root, visual, {
+      torpedoType: options.torpedoType,
       heading: options.heading,
-      speed: TORPEDO_SPEED,
-      depth: options.depth ?? 0,
+      speed: config.speed,
+      maxLifetime: config.maxLifetime,
+      depth: initialDepth,
+      initialDepth,
+      finalDepth,
       modelLength: modelSize.x,
       modelHeight: modelSize.y,
     },
@@ -126,12 +183,18 @@ export class TorpedorController implements Updatable {
 
   /** 鱼雷是否已过期（超时或命中销毁） */
   get isExpired(): boolean {
-    return this.age >= TORPEDO_MAX_LIFETIME
+    return this.age >= this.maxLifetime
   }
 
   update(delta: number): void {
-    if (this.isExpired) return
+    if (this.disposed) return
+
     this.age += delta
+
+    if (this.isExpired) {
+      this.dispose()
+      return
+    }
 
     this.movementDelta.set(
       Math.cos(this.heading) * this.currentSpeed * delta,
@@ -139,8 +202,18 @@ export class TorpedorController implements Updatable {
       -Math.sin(this.heading) * this.currentSpeed * delta,
     )
     this.root.position.add(this.movementDelta)
-    // 深度固定
+
+    this.depth = this.currentDepthForAge()
     this.root.position.y = -this.depth
+  }
+
+  private currentDepthForAge(): number {
+    if (this.age <= 7) return this.initialDepth
+    if (this.age >= 10) return this.finalDepth
+
+    const progress = (this.age - 7) / 3
+    const smoothProgress = progress * progress * (3 - 2 * progress)
+    return THREE.MathUtils.lerp(this.initialDepth, this.finalDepth, smoothProgress)
   }
 
   handleCollision(_event: CollisionEvent, self: CollisionEntitySnapshot): void {
@@ -165,16 +238,19 @@ export class TorpedorController implements Updatable {
 
       case CollisionSituationType.Torpedor_Hits_Submarine:
         //击沉一艘潜艇
+        this.hit=true
         this.currentSpeed = 0
 
         //播放爆炸动画
 
         //上传击沉记录
 
+        //回收鱼雷模型
         break
 
       case CollisionSituationType.Torpedor_Hits_Cargoship:
         //击沉一艘商船
+        this.hit=true
         this.currentSpeed = 0
 
         //播放爆炸动画
@@ -182,6 +258,7 @@ export class TorpedorController implements Updatable {
         //上传击沉记录
 
 
+        //回收鱼雷模型
         break
 
 
@@ -191,6 +268,16 @@ export class TorpedorController implements Updatable {
   }
 
   dispose(): void {
+    if (this.disposed) return
+    this.disposed = true
+
+    if(this.hit===false){
+      //播放爆炸动画
+
+
+    }
+
+
     this.entityRegistry.unregister(this.id)
     this.root.removeFromParent()
     disposeObject(this.visual)

@@ -43,6 +43,8 @@ import {
 } from '../constant/sceneUnits.ts'
 import { ExplosionSplashEffect } from '../ExplosionSplashEffect/explosionSplashEffect.ts'
 import { GameEntityRegistry } from '../entitymanager/GameEntityRegistry.ts'
+import { TorpedorController } from '../torpedor/TorpedorController.ts'
+import type { TorpedoLaunchPlan } from '../torpedor/torpedoTypes.ts'
 
 
 export interface SubmarineOptions {
@@ -63,12 +65,17 @@ export interface SubmarineOptions {
   isPlayerControlled: boolean
   /** GLB 模型文件路径 */
   modelUrl: string
+  /** 鱼雷 GLB 模型文件路径 */
+  torpedoModelUrl?: string
 
   /** 模型管理对象 */
   entityRegistry: GameEntityRegistry
 }
 
 const PERISCOPE_MOUSE_SENSITIVITY = 0.004
+
+/** 航速档位（从快到慢，供 Q/E 键循环使用） */
+const SPEED_FRACTION_STEPS = [1, 0.9, 0.75, 0.5, 0.25, 0, -0.25, -0.5, -0.75, -1]
 
 export class SubmarineController implements Updatable {
   // ---- 基础属性 ----
@@ -94,10 +101,15 @@ export class SubmarineController implements Updatable {
   public currentDepth = 0
   public verticalSpeed = 0
 
+  // ---- 面板指令（非 null 时覆盖键盘输入） ----
+  private commandedSpeedFraction: number | null = null
+  private commandedHeadingDegrees: number | null = null
+
   // ---- 外部引用 ----
   private engine: GameEngine
   private input: InputController
   private cameraCtrl: CameraController
+  private torpedoModelUrl: string | undefined
 
   // ---- 内部状态 ----
   private movementDelta = new THREE.Vector3()
@@ -125,6 +137,8 @@ export class SubmarineController implements Updatable {
     worldX: number
     worldZ: number
     isSubmerged: boolean
+    commandedSpeedFraction: number | null
+    torpedorCount: number
   }) => void
 
   onLimitNotice?: (message: string) => void
@@ -234,6 +248,7 @@ export class SubmarineController implements Updatable {
     this.isPlayerControlled = options.isPlayerControlled
     this.modelLength = modelLength
     this.modelHeight = modelHeight
+    this.torpedoModelUrl = options.torpedoModelUrl
 
     this.entityRegistry=entityRegistry
 
@@ -294,16 +309,25 @@ export class SubmarineController implements Updatable {
 
     // ---- 玩家潜艇 ----
 
-    // Q 键触发瞄准切换
-    if (this.input.pressedKeys.has('KeyQ') && !this.cameraCtrl.isAiming) {
-      // Q 键由外部（Vue 层或 InputController 的 onAction）处理，这里不重复
+    // Q 加速一档 / E 减速一档（非瞄准模式下生效）
+    if (!this.cameraCtrl.isAiming) {
+      if (this.input.pressedKeys.has('KeyQ')) {
+        this.input.pressedKeys.delete('KeyQ')
+        this.cycleSpeedCommand(1)
+      }
+      if (this.input.pressedKeys.has('KeyE')) {
+        this.input.pressedKeys.delete('KeyE')
+        this.cycleSpeedCommand(-1)
+      }
     }
 
-    // 瞄准模式禁止 KL 深度控制
+    // 瞄准模式禁止 KL 深度控制，并清除 Q/E 残留
     const isAiming = this.cameraCtrl.isAiming
     if (isAiming) {
       this.input.pressedKeys.delete('KeyK')
       this.input.pressedKeys.delete('KeyL')
+      this.input.pressedKeys.delete('KeyQ')
+      this.input.pressedKeys.delete('KeyE')
     }
 
     // 深度控制
@@ -384,18 +408,37 @@ export class SubmarineController implements Updatable {
   // ==================== 水平移动 ====================
 
   updateHorizontalMovement(delta: number): void {
-    const throttle = this.isPlayerControlled
-      ? (this.input.pressedKeys.has('KeyW') ? 1 : 0) -
-      (this.input.pressedKeys.has('KeyS') ? 1 : 0)
-      : 0
-
     const maxForwardSpeed = this.currentForwardSpeedLimit()
-    const targetSpeed =
-      throttle > 0
-        ? maxForwardSpeed
-        : throttle < 0
-          ? -maxForwardSpeed * REVERSE_SPEED_RATIO
-          : 0
+
+    // ---- 速度指令 ----
+    let throttle = 0
+    let targetSpeed = 0
+
+    if (this.isPlayerControlled) {
+      const rawThrottle =
+        (this.input.pressedKeys.has('KeyW') ? 1 : 0) -
+        (this.input.pressedKeys.has('KeyS') ? 1 : 0)
+
+      if (rawThrottle !== 0) {
+        // 键盘输入优先，清除面板速度指令
+        this.commandedSpeedFraction = null
+        throttle = rawThrottle
+        targetSpeed =
+          throttle > 0
+            ? maxForwardSpeed
+            : -maxForwardSpeed * REVERSE_SPEED_RATIO
+      } else if (this.commandedSpeedFraction !== null) {
+        // 面板速度指令
+        const fraction = this.commandedSpeedFraction
+        if (fraction >= 0) {
+          targetSpeed = maxForwardSpeed * fraction
+          throttle = fraction > 0 ? 1 : 0
+        } else {
+          targetSpeed = -maxForwardSpeed * REVERSE_SPEED_RATIO * Math.abs(fraction)
+          throttle = -1
+        }
+      }
+    }
 
     const requestedSpeedLimit =
       throttle < 0 ? maxForwardSpeed * REVERSE_SPEED_RATIO : maxForwardSpeed
@@ -421,26 +464,55 @@ export class SubmarineController implements Updatable {
       maxForwardSpeed,
     )
 
-    const turnInput = this.isPlayerControlled
-      ? (this.input.pressedKeys.has('KeyA') ? 1 : 0) -
-      (this.input.pressedKeys.has('KeyD') ? 1 : 0)
-      : 0
+    // ---- 转向指令 ----
+    if (this.isPlayerControlled) {
+      const rawTurn =
+        (this.input.pressedKeys.has('KeyA') ? 1 : 0) -
+        (this.input.pressedKeys.has('KeyD') ? 1 : 0)
 
-    if (turnInput !== 0 && Math.abs(this.currentSpeed) > 0.0001) {
-      const directionalLimit =
-        this.currentSpeed >= 0 ? maxForwardSpeed : maxForwardSpeed * REVERSE_SPEED_RATIO
-      const steeringStrength = THREE.MathUtils.clamp(
-        Math.abs(this.currentSpeed) / directionalLimit,
-        0,
-        1,
-      )
-      this.heading +=
-        turnInput *
-        Math.sign(this.currentSpeed) *
-        MAX_TURN_RATE *
-        steeringStrength *
-        delta
-      this.root.rotation.y = this.heading
+      if (rawTurn !== 0) {
+        // 键盘输入优先，清除面板航向指令
+        this.commandedHeadingDegrees = null
+        if (Math.abs(this.currentSpeed) > 0.0001) {
+          const directionalLimit =
+            this.currentSpeed >= 0 ? maxForwardSpeed : maxForwardSpeed * REVERSE_SPEED_RATIO
+          const steeringStrength = THREE.MathUtils.clamp(
+            Math.abs(this.currentSpeed) / directionalLimit,
+            0,
+            1,
+          )
+          this.heading +=
+            rawTurn *
+            Math.sign(this.currentSpeed) *
+            MAX_TURN_RATE *
+            steeringStrength *
+            delta
+          this.root.rotation.y = this.heading
+        }
+      } else if (this.commandedHeadingDegrees !== null && Math.abs(this.currentSpeed) > 0.0001) {
+        // 面板航向指令：直接转向目标（不受前进/后退方向影响）
+        const targetRad = THREE.MathUtils.degToRad(90 - this.commandedHeadingDegrees)
+        let diff = targetRad - this.heading
+        diff = Math.atan2(Math.sin(diff), Math.cos(diff)) // 归一化到 [-π, π]
+
+        const directionalLimit =
+          this.currentSpeed >= 0 ? maxForwardSpeed : maxForwardSpeed * REVERSE_SPEED_RATIO
+        const steeringStrength = THREE.MathUtils.clamp(
+          Math.abs(this.currentSpeed) / directionalLimit,
+          0,
+          1,
+        )
+        const maxTurn = MAX_TURN_RATE * steeringStrength * delta
+
+        if (Math.abs(diff) <= maxTurn) {
+          this.heading = targetRad
+          this.root.rotation.y = this.heading
+          this.commandedHeadingDegrees = null // 到达目标
+        } else {
+          this.heading += Math.sign(diff) * maxTurn
+          this.root.rotation.y = this.heading
+        }
+      }
     }
 
     this.movementDelta.set(
@@ -449,7 +521,6 @@ export class SubmarineController implements Updatable {
       -Math.sin(this.heading) * this.currentSpeed * delta,
     )
     this.root.position.add(this.movementDelta)
-
   }
 
   // ==================== 高度 ====================
@@ -517,6 +588,8 @@ export class SubmarineController implements Updatable {
       worldX: this.root.position.x,
       worldZ: this.root.position.z,
       isSubmerged: this.depthMeters > 0,
+      commandedSpeedFraction: this.commandedSpeedFraction,
+      torpedorCount: this.torpedorCount,
     })
   }
 
@@ -525,7 +598,76 @@ export class SubmarineController implements Updatable {
   }
 
   setTorpedorCount(newTorpedorCount: number) {
-    this.torpedorCount = newTorpedorCount
+    this.torpedorCount = Math.max(0, newTorpedorCount)
+    this.emitHudUpdate()
+  }
+
+  async fireTorpedo(plan: TorpedoLaunchPlan): Promise<TorpedorController | null> {
+    if (this.torpedorCount <= 0 || !this.torpedoModelUrl) return null
+
+    const forward = new THREE.Vector3(
+      Math.cos(this.heading),
+      0,
+      -Math.sin(this.heading),
+    ).normalize()
+    const right = new THREE.Vector3(-forward.z, 0, forward.x).normalize()
+    const tubeOffsetIndex = plan.tubeId - 2.5
+    const initialPosition = this.root.position
+      .clone()
+      .add(forward.multiplyScalar(this.modelLength * 0.55 + 5))
+      .add(right.multiplyScalar(tubeOffsetIndex * this.modelLength * 0.035))
+
+    const torpedo = await TorpedorController.create({
+      id: `${this.id}-torpedo-${Date.now()}-${plan.tubeId}`,
+      ownerId: this.id,
+      torpedoType: plan.torpedoType,
+      initialPosition,
+      heading: THREE.MathUtils.degToRad(90 - plan.headingDegrees),
+      initialDepth: this.currentDepth + 3.5 * METERS_TO_SCENE,
+      finalDepth: plan.finalDepthMeters * METERS_TO_SCENE,
+      modelUrl: this.torpedoModelUrl,
+      entityRegistry: this.entityRegistry,
+    })
+
+    this.engine.scene.add(torpedo.root)
+    this.engine.addUpdatable(torpedo)
+    this.setTorpedorCount(this.torpedorCount - 1)
+
+    return torpedo
+  }
+
+  // ---- 面板指令接口 ----
+
+  /** 设置航速指令（fraction：-1 到 1，0 = 停车） */
+  setSpeedCommand(fraction: number): void {
+    this.commandedSpeedFraction = THREE.MathUtils.clamp(fraction, -1, 1)
+  }
+
+  /** 清除航速指令，恢复键盘控制 */
+  clearSpeedCommand(): void {
+    this.commandedSpeedFraction = null
+  }
+
+  /** 设置航向指令（罗盘度数，0–360） */
+  setHeadingCommand(degrees: number): void {
+    this.commandedHeadingDegrees = normalizeDegrees(degrees)
+  }
+
+  /** 清除航向指令，恢复键盘控制 */
+  clearHeadingCommand(): void {
+    this.commandedHeadingDegrees = null
+  }
+
+  /** Q/E 键循环切换航速档位。direction: 1 = 加速（Q），-1 = 减速（E） */
+  private cycleSpeedCommand(direction: 1 | -1): void {
+    const current = this.commandedSpeedFraction ?? 0
+    const currentIndex = SPEED_FRACTION_STEPS.indexOf(current)
+    const nextIndex = THREE.MathUtils.clamp(
+      currentIndex - direction,
+      0,
+      SPEED_FRACTION_STEPS.length - 1,
+    )
+    this.commandedSpeedFraction = SPEED_FRACTION_STEPS[nextIndex] ?? 0
   }
 
   handleCollision(_event: CollisionEvent, self: CollisionEntitySnapshot): void {

@@ -12,9 +12,11 @@ import { OceanController } from './ocean/OceanController.ts'
 import { tuneSunMaterials, disposeObject } from './modules/modelUtils.ts'
 import { HitDetectSystem } from './modules/hitdetect.ts'
 import UnderwaterStatusPanel from './panel/UnderwaterStatusPanel.vue'
+import { headingStringToDegrees } from './modules/navigationMath.ts'
 
 import submarineUrl from '../../model/type_vii_d_u-boat.glb?url'
 import cargoshipUrl from '../../model/liberty_ship.glb?url'
+import torpedoUrl from '../../model/mkxii_torpedo.glb?url'
 import sunUrl from '../../model/sun.glb?url'
 import periscopeSightUrl from '../../assets/Uboot Periscope sight/UBootPeriscopeAimingSight.png?url'
 import '../../css/test-3d-programized-ocean.css'
@@ -22,6 +24,7 @@ import '../../css/test-3d-programized-ocean.css'
 import { v4 as uuidv4 } from 'uuid'
 import { ExplosionSplashEffect } from './ExplosionSplashEffect/explosionSplashEffect.ts'
 import { GameEntityRegistry } from './entitymanager/GameEntityRegistry.ts'
+import type { TorpedoLaunchPlan } from './torpedor/torpedoTypes.ts'
 
 //------本地测试的版本(尚未和后端服务器进行交互)-------//
 
@@ -41,7 +44,7 @@ const WAVE_SETTINGS = {
 
 const SURFACE_DEPTH_EPSILON_SCENE = 0.02
 const SCENE_TO_METERS = 77 / 22 // MODEL_LENGTH_METERS / MODEL_LENGTH_SCENE
-const UNDERWATER_UI_DEPTH_METERS = 12
+const UNDERWATER_UI_DEPTH_METERS = 120 //控制UnderWaterStatusPanel显示的深度指标, 潜深超过这个值后显示UnderWaterStatusPanel界面
 
 // -------------------- Vue 响应式状态 --------------------
 const viewer = ref<HTMLDivElement | null>(null)
@@ -59,6 +62,9 @@ const navigationState = ref<'水面' | '水下' | '潜望镜视角' | '水面瞄
 const submarineWorldX = ref(0)
 const submarineWorldZ = ref(0)
 const isAimingViewActive = ref(false)
+const commandedSpeedFraction = ref<number | null>(null)
+const remainingTorpedoes = ref(14)
+const targetDefaultHeight = ref(0)
 
 // -------------------- 计算属性 --------------------
 const loadingLabel = computed(() => `${Math.round(loadingProgress.value)}%`)
@@ -87,6 +93,11 @@ let hitDetect: HitDetectSystem | undefined
 let sunModel: THREE.Object3D | undefined
 let hintTimer: ReturnType<typeof setTimeout> | undefined
 let noticeTimer: ReturnType<typeof setTimeout> | undefined
+let salvoInProgress = false
+const salvoTimers: ReturnType<typeof setTimeout>[] = []
+
+// -------------------- 面板引用 --------------------
+const statusPanelRef = ref<InstanceType<typeof UnderwaterStatusPanel> | null>(null)
 
 // -------------------- 加载进度 --------------------
 const fileProgress = new Map<string, { loaded: number; total: number }>()
@@ -114,6 +125,62 @@ function showLimitNotice(message: string) {
   limitNotice.value = message
   if (noticeTimer) clearTimeout(noticeTimer)
   noticeTimer = setTimeout(() => { limitNotice.value = '' }, 1800)
+}
+
+// -------------------- 面板指令 → 潜艇 --------------------
+function handleSpeedCommand(fraction: number) {
+  submarine?.setSpeedCommand(fraction)
+}
+
+function handleHeadingCommand(headingString: string) {
+  const degrees = headingStringToDegrees(headingString)
+  submarine?.setHeadingCommand(degrees)
+}
+
+function handleSpaceFire() {
+  if (salvoInProgress || !submarine || !statusPanelRef.value) return
+
+  const tubeStates = statusPanelRef.value.getTubeStates()
+  const selectedTubeCount = tubeStates.filter((tube) => tube.selected).length
+  if (selectedTubeCount === 0) {
+    showLimitNotice('请选择鱼雷发射管')
+    return
+  }
+
+  const plans = statusPanelRef.value.getSelectedLaunchPlans()
+  if (plans.length === 0) {
+    showLimitNotice('所选发射管未装订弹道')
+    return
+  }
+
+  if (plans.some((plan) => plan.isOutOfRange)) {
+    showLimitNotice('目标超出射程')
+  }
+
+  scheduleTorpedoSalvo(plans)
+}
+
+function scheduleTorpedoSalvo(plans: TorpedoLaunchPlan[]) {
+  salvoInProgress = true
+  let completed = 0
+
+  plans.forEach((plan, index) => {
+    const timer = setTimeout(async () => {
+      const torpedo = await submarine?.fireTorpedo(plan)
+      if (torpedo) {
+        hitDetect?.registerTorpedo(torpedo)
+        statusPanelRef.value?.markTubesFired([plan.tubeId])
+      } else {
+        showLimitNotice('无备用鱼雷')
+      }
+
+      completed += 1
+      if (completed >= plans.length) {
+        salvoInProgress = false
+      }
+    }, index * 350)
+    salvoTimers.push(timer)
+  })
 }
 
 // -------------------- 挂载 --------------------
@@ -175,13 +242,14 @@ onMounted(async () => {
       id: uuidv4(), //使用uuid作为模型编号
       // coordinateCode: 'AD16',
       worldPosition: {
-        x: 1000,
-        z: 550
+        x: 900,
+        z: 450
       },
       initialHeadingDegrees: 180,
       initialDepthMeters: 0,
       isPlayerControlled: true,
       modelUrl: submarineUrl,
+      torpedoModelUrl: torpedoUrl,
       entityRegistry
       })
 
@@ -195,6 +263,10 @@ onMounted(async () => {
       submarineWorldX.value = data.worldX
       submarineWorldZ.value = data.worldZ
       isAimingViewActive.value = cameraCtrl?.isAiming ?? false
+      if (data.commandedSpeedFraction !== commandedSpeedFraction.value) {
+        commandedSpeedFraction.value = data.commandedSpeedFraction
+      }
+      remainingTorpedoes.value = data.torpedorCount
     }
 
     submarine.onLimitNotice = (msg) => showLimitNotice(msg)
@@ -206,8 +278,8 @@ onMounted(async () => {
         // coordinateCode: 'AD43',
 
         worldPosition: {
-        x: 1000,
-        z: 650
+        x: 900,
+        z: 900
         },
 
         headingDegrees: 90,
@@ -217,6 +289,7 @@ onMounted(async () => {
       }),
     )
     console.log(`货船高度: ${cargoShips[0]?.modelHeight}`)
+    targetDefaultHeight.value = cargoShips[0]?.modelHeight ?? 0
 
     // console.log('爆炸特效测试')
     // const effectTest=new ExplosionSplashEffect({position: new THREE.Vector3(1000, 0, 640),})
@@ -242,6 +315,9 @@ onMounted(async () => {
       if (code === 'KeyF' && pressed && submarine && cameraCtrl) {
         const msg = cameraCtrl.toggleAiming(submarine)
         if (msg) showLimitNotice(msg)
+      }
+      if (code === 'Space' && pressed) {
+        handleSpaceFire()
       }
     }
 
@@ -281,6 +357,8 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   if (hintTimer) clearTimeout(hintTimer)
   if (noticeTimer) clearTimeout(noticeTimer)
+  for (const timer of salvoTimers) clearTimeout(timer)
+  salvoTimers.length = 0
   if (hitDetect && engine) {
     engine.removeUpdatable(hitDetect)
     hitDetect.clear()
@@ -306,6 +384,7 @@ onBeforeUnmount(() => {
 
     <!-- HUD 面板 -->
     <UnderwaterStatusPanel
+      ref="statusPanelRef"
       v-if="isLoaded && showUnderwaterStatus"
       :mode="underwaterStatusMode"
       :depth-meters="depthMeters"
@@ -315,6 +394,11 @@ onBeforeUnmount(() => {
       :navigation-state="navigationState"
       :submarine-world-x="submarineWorldX"
       :submarine-world-z="submarineWorldZ"
+      :target-default-height="targetDefaultHeight"
+      :remaining-torpedoes="remainingTorpedoes"
+      :commanded-speed-fraction="commandedSpeedFraction"
+      @speed-command="handleSpeedCommand"
+      @heading-command="handleHeadingCommand"
     />
 
     <!-- 潜望镜/水面瞄准叠加层 -->
