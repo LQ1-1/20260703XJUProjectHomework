@@ -134,6 +134,7 @@ export class HitDetectSystem implements Updatable {
     this.entities.set(entity.id, registered)
   }
 
+  //给潜艇注册碰撞检验
   registerSubmarine(submarine: SubmarineController): void {
     this.register({
       id: submarine.id,
@@ -151,12 +152,14 @@ export class HitDetectSystem implements Updatable {
     })
   }
 
+  //给潜艇队列注册碰撞检测
   registerSubmarines(submarines: SubmarineController[]): void{
     for(const submarine of submarines){
       this.registerSubmarine(submarine)
     }
   }
 
+  //给商船注册碰撞检测
   registerCargoShip(ship: CargoShipController): void {
     this.register({
       id: ship.id,
@@ -174,6 +177,7 @@ export class HitDetectSystem implements Updatable {
     })
   }
 
+  //给商船队列注册碰撞检测
   registerCargoShips(ships: CargoShipController[]): void {
     for (const ship of ships) {
       this.registerCargoShip(ship)
