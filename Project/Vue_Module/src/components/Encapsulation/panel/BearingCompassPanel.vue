@@ -14,7 +14,9 @@ const headingLabel = computed(() =>
   Math.round(props.headingDegrees).toString().padStart(3, '0'),
 )
 const relativeBearingLabel = computed(() =>
-  Math.round(props.periscopeRelativeBearingDegrees).toString().padStart(3, '0'),
+  `${props.periscopeRelativeBearingDegrees >= 0 ? '+' : '-'}${Math.abs(
+    Math.round(props.periscopeRelativeBearingDegrees),
+  ).toString().padStart(3, '0')}`,
 )
 const hullIndicatorStyle = computed(() => ({
   transform: `translate(-55.8%, -52.2%) rotate(${props.headingDegrees}deg)`,

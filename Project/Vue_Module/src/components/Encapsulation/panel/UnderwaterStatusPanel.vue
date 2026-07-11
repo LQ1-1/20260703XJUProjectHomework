@@ -131,6 +131,7 @@ function handleUseRangeDistance(distance: number): void {
 </script>
 
 <template>
+  <!-- 以侧边栏的形式 -->
   <aside class="underwater-status" :class="`underwater-status--${mode}`" aria-label="航行信息">
     <dl class="instrument-strip">
       <div>
@@ -199,6 +200,7 @@ function handleUseRangeDistance(distance: number): void {
         @use-distance="handleUseRangeDistance" />
 
       <TorpedorDataComputer v-if="showTorpedoComputer" ref="torpedoComputerRef" :heading-degrees="headingDegrees"
+        :periscope-relative-bearing-degrees="periscopeRelativeBearingDegrees"
         :current-depth-meters="depthMeters" :remaining-torpedoes="remainingTorpedoes" />
 
     </div>

@@ -14,6 +14,7 @@ import type { TorpedoLaunchPlan, TorpedoTubeState } from '../torpedor/torpedoTyp
 interface TubeBinding {
   torpedoType: TorpedoType
   baseHeadingDegrees: number
+  targetRelativeBearingDegrees: number
   finalDepthMeters: number
   spreadDegrees: number
   interceptAngleDegrees: number
@@ -31,12 +32,15 @@ interface Tube {
 
 const props = defineProps<{
   headingDegrees: number
+  periscopeRelativeBearingDegrees: number
   currentDepthMeters: number
   remainingTorpedoes: number
 }>()
 
 const AOB_MIN = -180
 const AOB_MAX = 180
+const RELATIVE_BEARING_MIN = -180
+const RELATIVE_BEARING_MAX = 180
 const RELOAD_SECONDS = 60
 
 const torpedoOptions: { label: string; value: TorpedoType; speed: number; maxLifetime: number }[] = [
@@ -45,6 +49,7 @@ const torpedoOptions: { label: string; value: TorpedoType; speed: number; maxLif
 ]
 
 const aob = ref<number | null>(0)
+const targetRelativeBearingDegrees = ref<number | null>(0)
 const targetDistance = ref<number | null>(null)
 const targetSpeedKnots = ref<number | null>(0)
 const torpedoType = ref<TorpedoType>('G7e')
@@ -77,6 +82,15 @@ watch(
   },
 )
 
+watch(
+  () => props.periscopeRelativeBearingDegrees,
+  (bearing) => {
+    if (!Number.isFinite(bearing)) return
+    targetRelativeBearingDegrees.value = bearing
+  },
+  { immediate: true },
+)
+
 const timer = window.setInterval(() => {
   now.value = Date.now()
   for (const tube of tubes.value) {
@@ -105,12 +119,19 @@ function signForAob(value: number): number {
   return value < 0 ? -1 : 1
 }
 
+function formatSignedDegrees(value: number): string {
+  return `${value >= 0 ? '+' : '-'}${Math.abs(Math.round(value)).toString().padStart(3, '0')}`
+}
+
 function selectedTorpedoConfig() {
   return torpedoOptions.find((option) => option.value === torpedoType.value) ?? torpedoOptions[0]!
 }
 
 function validateInputs(): string | null {
   if (!numberIsInRange(aob.value, AOB_MIN, AOB_MAX)) return 'AOB 必须在 -180 到 180 之间'
+  if (!numberIsInRange(targetRelativeBearingDegrees.value, RELATIVE_BEARING_MIN, RELATIVE_BEARING_MAX)) {
+    return '目标相对方位必须在 -180 到 180 之间'
+  }
   if (!numberIsInRange(targetDistance.value, 0.000001)) return '目标距离必须大于 0'
   if (!numberIsInRange(targetSpeedKnots.value, 0)) return '目标航速必须大于等于 0'
   if (!numberIsInRange(finalDepthMeters.value, 0)) return '最终深度必须大于等于 0'
@@ -126,6 +147,7 @@ function calculateBinding(): TubeBinding | null {
   }
 
   const validAob = aob.value!
+  const validTargetRelativeBearingDegrees = targetRelativeBearingDegrees.value!
   const validTargetDistance = targetDistance.value!
   const validTargetSpeedKnots = targetSpeedKnots.value!
   const validFinalDepthMeters = finalDepthMeters.value!
@@ -151,12 +173,15 @@ function calculateBinding(): TubeBinding | null {
   }
 
   const baseHeadingDegrees = normalizeDegrees(
-    props.headingDegrees + interceptAngleDegrees * signForAob(validAob),
+    props.headingDegrees +
+      validTargetRelativeBearingDegrees +
+      interceptAngleDegrees * signForAob(validAob),
   )
 
   return {
     torpedoType: torpedoType.value,
     baseHeadingDegrees,
+    targetRelativeBearingDegrees: validTargetRelativeBearingDegrees,
     finalDepthMeters: validFinalDepthMeters,
     spreadDegrees: validSpreadDegrees,
     interceptAngleDegrees,
@@ -300,6 +325,10 @@ defineExpose({
         <input v-model.number="aob" type="number" min="-180" max="180" step="0.1" />
       </label>
       <label>
+        目标相对方位
+        <input v-model.number="targetRelativeBearingDegrees" type="number" min="-180" max="180" step="0.1" />
+      </label>
+      <label>
         目标距离
         <input v-model.number="targetDistance" type="number" min="0" step="0.1" />
       </label>
@@ -347,6 +376,10 @@ defineExpose({
       <div>
         <dt>截击角</dt>
         <dd>{{ firstBinding?.interceptAngleDegrees.toFixed(1) ?? '--' }}</dd>
+      </div>
+      <div>
+        <dt>目标相对方位</dt>
+        <dd>{{ firstBinding ? formatSignedDegrees(firstBinding.targetRelativeBearingDegrees) : '--' }}</dd>
       </div>
       <div>
         <dt>发射航向</dt>

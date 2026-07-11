@@ -7,6 +7,13 @@ export function normalizeDegrees(degrees: number) {
 
 }
 
+export function normalizeSignedDegrees(degrees: number) {
+
+    const normalized = normalizeDegrees(degrees)
+    return normalized > 180 ? normalized - 360 : normalized
+
+}
+
 export function yawToCompassDegrees(yaw: number) {
 
     return normalizeDegrees(90 - THREE.MathUtils.radToDeg(yaw))

@@ -25,7 +25,7 @@ import type { CollisionEntitySnapshot, CollisionEvent } from '../modules/hitdete
 import { CollisionDecision, CollisionSituationType } from '../modules/hitdetect.ts'
 import { moveTowards } from '../modules/mathUtils.ts'
 import { normalizeSubmarine, tuneSubmarineMaterials, disposeObject } from '../modules/modelUtils.ts'
-import { normalizeDegrees, yawToCompassDegrees } from '../modules/navigationMath.ts'
+import { normalizeDegrees, normalizeSignedDegrees, yawToCompassDegrees } from '../modules/navigationMath.ts'
 import { MapCode } from '../../../common/map/mapcode.ts'
 import {
   MAX_DEPTH_SCENE,
@@ -630,7 +630,7 @@ export class SubmarineController implements Updatable {
       depthMeters: this.depthMeters,
       headingDegrees: currentHeadingDegrees,
       periscopeRelativeBearingDegrees: isAiming
-        ? normalizeDegrees(yawToCompassDegrees(periscopeYaw) - currentHeadingDegrees)
+        ? normalizeSignedDegrees(yawToCompassDegrees(periscopeYaw) - currentHeadingDegrees)
         : 0,
       navigationState:
         this.cameraCtrl.aimingMode === 'surfaceAim'

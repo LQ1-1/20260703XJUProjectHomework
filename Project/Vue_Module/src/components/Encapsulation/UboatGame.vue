@@ -44,7 +44,7 @@ const WAVE_SETTINGS = {
 
 const SURFACE_DEPTH_EPSILON_SCENE = 0.02
 const SCENE_TO_METERS = 77 / 22 // MODEL_LENGTH_METERS / MODEL_LENGTH_SCENE
-const UNDERWATER_UI_DEPTH_METERS = 120 //控制UnderWaterStatusPanel显示的深度指标, 潜深超过这个值后显示UnderWaterStatusPanel界面
+const UNDERWATER_UI_DEPTH_METERS = 11 //控制UnderWaterStatusPanel显示的深度指标, 潜深超过这个值后显示UnderWaterStatusPanel界面
 
 // -------------------- Vue 响应式状态 --------------------
 const viewer = ref<HTMLDivElement | null>(null)
@@ -278,12 +278,12 @@ onMounted(async () => {
         // coordinateCode: 'AD43',
 
         worldPosition: {
-        x: 900,
+        x: 750,
         z: 900
         },
 
         headingDegrees: 90,
-        speedKnots: 0,
+        speedKnots: 7,
         modelUrl: cargoshipUrl,
         entityRegistry
       }),

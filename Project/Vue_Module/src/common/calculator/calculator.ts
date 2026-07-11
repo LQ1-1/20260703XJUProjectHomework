@@ -5,10 +5,10 @@
 
 export class TorpedoFireControlComputerParameter {
 
-    public AOB: number;
-    public Distance: number;
-    public TargetSpeed: number;
-    public TorpedorSpeed: number
+    public AOB: number; //角度°
+    public Distance: number;    //游戏单位
+    public TargetSpeed: number; //游戏速度单位
+    public TorpedorSpeed: number    //游戏速度单位
 
     constructor(AOB: number, Distance: number, TargetSpeed: number, TorpedorSpeed: number) {
         this.AOB = AOB;
