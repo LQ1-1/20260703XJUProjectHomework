@@ -151,6 +151,12 @@ export class HitDetectSystem implements Updatable {
     })
   }
 
+  registerSubmarines(submarines: SubmarineController[]): void{
+    for(const submarine of submarines){
+      this.registerSubmarine(submarine)
+    }
+  }
+
   registerCargoShip(ship: CargoShipController): void {
     this.register({
       id: ship.id,

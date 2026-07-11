@@ -16,14 +16,14 @@
 .underwater-status--compact {
   bottom: 18px;
   left: 18px;
-  width: min(380px, calc(100vw - 36px));
+  width: min(450px, calc(100vw - 36px));
   background: rgba(7, 11, 13, 0.82);
 }
 
 .underwater-status--full {
   top: 50%;
   left: 50%;
-  width: min(760px, calc(100vw - 48px));
+  width: min(950px, calc(100vw - 48px));
   max-height: calc(100vh - 48px);
   transform: translate(-50%, -50%);
 }

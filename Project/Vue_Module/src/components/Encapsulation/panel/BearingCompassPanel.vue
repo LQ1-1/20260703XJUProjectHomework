@@ -39,7 +39,7 @@ const periscopeArrowStyle = computed(() => ({
           :style="hullIndicatorStyle"
         />
       </div>
-      <p class="bearing-readout"><span>HDG</span>{{ headingLabel }}°</p>
+      <p class="bearing-readout"><span>HDG（绝对方位）</span>{{ headingLabel }}°</p>
     </article>
 
     <article class="bearing-gauge">
@@ -47,7 +47,7 @@ const periscopeArrowStyle = computed(() => ({
         <img class="bearing-dial-image" :src="relativeBearingDialUrl" alt="" draggable="false" />
         <span class="periscope-relative-arrow" :style="periscopeArrowStyle"></span>
       </div>
-      <p class="bearing-readout"><span>REL</span>{{ relativeBearingLabel }}°</p>
+      <p class="bearing-readout"><span>REL（相对方位）</span>{{ relativeBearingLabel }}°</p>
     </article>
   </section>
 </template>

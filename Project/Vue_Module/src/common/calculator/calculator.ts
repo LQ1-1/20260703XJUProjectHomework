@@ -98,7 +98,7 @@ export class RangeComputer {
         this.TargetRealHight = TargetRealHight;
     }
 
-    getDistance(){
+    getDistance() {
         if (
             !Number.isFinite(this.MilReading) ||
             !Number.isFinite(this.TargetRealHight) ||
@@ -107,7 +107,7 @@ export class RangeComputer {
         ) {
             return NaN
         }
-        return this.RangeFactor * (this.TargetRealHight/ this.MilReading)
+        return this.RangeFactor * (this.TargetRealHight / this.MilReading)
     }
 }
 
@@ -139,6 +139,14 @@ AOB = 180 - 目标航向+自身航向+目标方位（相对艇艏方位）
 
 
 
+提前量的正负和AOB角有关，
+AOB为负说明潜艇在目标左舷，鱼雷航向=目标的绝对方位-提前量
+AOB为正说明潜艇在目标的右舷，鱼雷航向=目标绝对方位+提前量
+
+
 */
+
+
+
 
 

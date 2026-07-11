@@ -26,6 +26,8 @@ import { ExplosionSplashEffect } from './ExplosionSplashEffect/explosionSplashEf
 import { GameEntityRegistry } from './entitymanager/GameEntityRegistry.ts'
 import type { TorpedoLaunchPlan } from './torpedor/torpedoTypes.ts'
 
+import { CARGOSHIP_HIGHT_SCENE } from './constant/sceneUnits.ts'
+
 //------本地测试的版本(尚未和后端服务器进行交互)-------//
 
 
@@ -185,6 +187,7 @@ function scheduleTorpedoSalvo(plans: TorpedoLaunchPlan[]) {
 
 // -------------------- 挂载 --------------------
 onMounted(async () => {
+  targetDefaultHeight.value = CARGOSHIP_HIGHT_SCENE
   const container = viewer.value
   if (!container) return
 
@@ -235,88 +238,13 @@ onMounted(async () => {
 
     // 潜艇
     //用户操作的潜艇
-    submarine = await SubmarineController.create(
-      engine, 
-      input, 
-      cameraCtrl, {
-      id: uuidv4(), //使用uuid作为模型编号
-      // coordinateCode: 'AD16',
-      worldPosition: {
-        x: 900,
-        z: 450
-      },
-      initialHeadingDegrees: 180,
-      initialDepthMeters: 0,
-      isPlayerControlled: true,
-      modelUrl: submarineUrl,
-      torpedoModelUrl: torpedoUrl,
-      entityRegistry
-      })
+
 
     // HUD 回调
-    submarine.onHudUpdate = (data) => {
-      speedKmh.value = data.speedKmh
-      depthMeters.value = data.depthMeters
-      headingDegrees.value = data.headingDegrees
-      periscopeRelativeBearingDegrees.value = data.periscopeRelativeBearingDegrees
-      navigationState.value = data.navigationState
-      submarineWorldX.value = data.worldX
-      submarineWorldZ.value = data.worldZ
-      isAimingViewActive.value = cameraCtrl?.isAiming ?? false
-      if (data.commandedSpeedFraction !== commandedSpeedFraction.value) {
-        commandedSpeedFraction.value = data.commandedSpeedFraction
-      }
-      remainingTorpedoes.value = data.torpedorCount
-    }
 
-    submarine.onLimitNotice = (msg) => showLimitNotice(msg)
 
     // 货船（AI 水面航行）
-    cargoShips.push(
-      await CargoShipController.create(engine, {
-        id: uuidv4(),
-        // coordinateCode: 'AD43',
 
-        worldPosition: {
-        x: 750,
-        z: 910
-        },
-
-        headingDegrees: 160,
-        speedKnots: 7,
-        modelUrl: cargoshipUrl,
-        entityRegistry
-      }),
-
-        await CargoShipController.create(engine, {
-        id: uuidv4(),
-
-        worldPosition: {
-        x: 750,
-        z: 1010
-        },
-
-        headingDegrees: 160,
-        speedKnots: 7,
-        modelUrl: cargoshipUrl,
-        entityRegistry
-      }),
-
-      await CargoShipController.create(engine, {
-        id: uuidv4(),
-        worldPosition: {
-        x: 950,
-        z: 1150
-        },
-
-        headingDegrees: 160,
-        speedKnots: 7,
-        modelUrl: cargoshipUrl,
-        entityRegistry
-      }),
-    )
-    console.log(`货船高度: ${cargoShips[0]?.modelHeight}`)
-    targetDefaultHeight.value = cargoShips[0]?.modelHeight ?? 0
 
     // 注册到引擎更新循环
     for (const ship of cargoShips) {
@@ -325,8 +253,9 @@ onMounted(async () => {
 
     //注册碰撞检测
     hitDetect = new HitDetectSystem({ scene: engine.scene })
-    hitDetect.registerSubmarine(submarine)
-    hitDetect.registerCargoShips(cargoShips)
+    hitDetect.registerSubmarine()//玩家操控的潜艇注册碰撞检验
+    hitDetect.registerSubmarine()//给其他玩家的操控的潜艇也注册碰撞检验
+    hitDetect.registerCargoShips()//给商船注册碰撞检验
     engine.addUpdatable(hitDetect)
 
     // F 键：瞄准切换

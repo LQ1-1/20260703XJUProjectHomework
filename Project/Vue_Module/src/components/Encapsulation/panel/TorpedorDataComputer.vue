@@ -42,6 +42,7 @@ const AOB_MAX = 180
 const RELATIVE_BEARING_MIN = -180
 const RELATIVE_BEARING_MAX = 180
 const RELOAD_SECONDS = 60
+const RELOAD_MS = RELOAD_SECONDS * 1000
 
 const torpedoOptions: { label: string; value: TorpedoType; speed: number; maxLifetime: number }[] = [
   { label: 'G7e 30节', value: 'G7e', speed: TORPEDO_SPEED_G7E, maxLifetime: TORPEDO_MAX_LIFETIME_G7E },
@@ -139,6 +140,7 @@ function validateInputs(): string | null {
   return null
 }
 
+//计算绑定
 function calculateBinding(): TubeBinding | null {
   const validationMessage = validateInputs()
   if (validationMessage) {
@@ -172,11 +174,17 @@ function calculateBinding(): TubeBinding | null {
     return null
   }
 
+  //鱼雷最终航向
   const baseHeadingDegrees = normalizeDegrees(
     props.headingDegrees +
       validTargetRelativeBearingDegrees +
-      interceptAngleDegrees * signForAob(validAob),
+      interceptAngleDegrees * signForAob(validAob),   
   )
+  /*
+  提前量的正负和AOB角有关，
+  AOB为负说明潜艇在目标左舷，鱼雷航向=目标的绝对方位-提前量
+  AOB为正说明潜艇在目标的右舷，鱼雷航向=目标绝对方位+提前量
+  */
 
   return {
     torpedoType: torpedoType.value,
@@ -254,14 +262,24 @@ function getSelectedLaunchPlans(): TorpedoLaunchPlan[] {
 
 function markTubesFired(tubeIds: number[]): void {
   const firedIds = new Set(tubeIds)
-  const reloadEndTime = Date.now() + RELOAD_SECONDS * 1000
+  const currentTime = Date.now()
+  const queuedReloadEndTimes = tubes.value
+    .map((tube) => tube.reloadEndTime ?? 0)
+    .filter((reloadEndTime) => reloadEndTime > currentTime)
+  const firedTubes = tubes.value
+    .filter((tube) => firedIds.has(tube.id))
+    .sort((left, right) => left.id - right.id)
+  let nextReloadEndTime = Math.max(
+    currentTime,
+    ...queuedReloadEndTimes,
+  )
 
-  for (const tube of tubes.value) {
-    if (!firedIds.has(tube.id)) continue
+  for (const tube of firedTubes) {
+    nextReloadEndTime += RELOAD_MS
     tube.selected = false
     tube.binding = null
     tube.isLoaded = false
-    tube.reloadEndTime = reloadEndTime
+    tube.reloadEndTime = nextReloadEndTime
   }
 }
 

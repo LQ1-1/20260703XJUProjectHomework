@@ -196,13 +196,13 @@ function handleUseRangeDistance(distance: number): void {
     </div>
 
     <div v-if="showTorpedoComputer || showRangeComputer" class="computer-stack">
+      
       <RangeComputer v-if="showRangeComputer" :default-target-height="targetDefaultHeight"
         @use-distance="handleUseRangeDistance" />
 
       <TorpedorDataComputer v-if="showTorpedoComputer" ref="torpedoComputerRef" :heading-degrees="headingDegrees"
         :periscope-relative-bearing-degrees="periscopeRelativeBearingDegrees"
         :current-depth-meters="depthMeters" :remaining-torpedoes="remainingTorpedoes" />
-
     </div>
 
     <BearingCompassPanel :heading-degrees="headingDegrees"
