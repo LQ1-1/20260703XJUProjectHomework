@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import type { Updatable } from '../engine/GameEngine'
+import type { Updatable, GameEngine } from '../engine/GameEngine'
 
 export type ExplosionSplashEffectPosition = THREE.Vector3 | { x: number; y?: number; z: number }
 

@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import type { Updatable } from '../engine/GameEngine'
+import type { Updatable, GameEngine } from '../engine/GameEngine'
 
 export type ExplosionSplashEffectPosition =
   | THREE.Vector3
@@ -467,6 +467,18 @@ export class ExplosionSplashEffect implements Updatable {
       #include <colorspace_fragment>
     }
   `
+}
+
+export function TorpedoExplosion(position: {x: number, y: number, z:number}, engine: GameEngine) {
+  position.y-=2 //爆炸中心下移2个单位
+  const effect = new ExplosionSplashEffect({position})
+
+  effect.onFinished = (finishedEffect) => {
+    engine.removeUpdatable(finishedEffect)
+  }
+
+  engine.scene.add(effect.root)
+  engine.addUpdatable(effect)
 }
 
 

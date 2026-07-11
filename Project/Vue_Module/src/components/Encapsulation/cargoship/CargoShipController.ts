@@ -22,8 +22,7 @@ import type { CollisionEntitySnapshot, CollisionEvent } from '../modules/hitdete
 import { CollisionDecision, CollisionSituationType } from '../modules/hitdetect.ts'
 import { normalizeSubmarine, disposeObject } from '../modules/modelUtils'
 import { MapCode } from '../../../common/map/mapcode'
-import { CARGO_MODEL_LENGTH_SCENE, CARGO_SURFACE_MODEL_OFFSET, METERS_TO_SCENE } from '../constant/sceneUnits'
-import type { Break } from 'three/tsl'
+import { CARGO_MODEL_LENGTH_SCENE, CARGO_SURFACE_MODEL_OFFSET, METERS_TO_SCENE, SINK_DEPTH } from '../constant/sceneUnits'
 import { GameEntityRegistry } from '../entitymanager/GameEntityRegistry.ts'
 
 export interface CargoShipOptions {
@@ -62,9 +61,12 @@ export class CargoShipController implements Updatable {
 
   public heading = 0
   public currentSpeed = 0
+
   public isDestroyed = false  //商船是否被击沉
+  public isSink = false //商船是否下沉到底，沉底后碰撞检测失效
 
   private movementDelta = new THREE.Vector3()
+  private readonly sinkPitch = THREE.MathUtils.degToRad(-45)
 
   // ==================== 静态异步工厂 ====================
 
@@ -183,13 +185,18 @@ export class CargoShipController implements Updatable {
     this.currentSpeed = speed
     this.modelLength = modelLength
     this.modelHeight = modelHeight
-    this.entityRegistry=entityRegistry
+    this.entityRegistry = entityRegistry
   }
 
   // ==================== 每帧更新 ====================
 
   update(delta: number): void {
-    if (this.isDestroyed || Math.abs(this.currentSpeed) < 0.0001) return
+    if (this.isDestroyed) {
+      this.updateSinking(delta)
+      return
+    }
+
+    if (Math.abs(this.currentSpeed) < 0.0001) return
 
     this.root.rotation.y = this.heading
 
@@ -209,7 +216,33 @@ export class CargoShipController implements Updatable {
 
   /** 标记被摧毁 */
   destroy(): void {
+    if (this.isDestroyed) return
     this.isDestroyed = true
+    this.currentSpeed = 0
+  }
+
+  private updateSinking(delta: number): void {
+    if (this.isSink) return
+
+    const targetY = -SINK_DEPTH
+    const sinkSpeed = 3 // 场景单位/秒
+    this.root.position.y = Math.max(
+      this.root.position.y - sinkSpeed * delta,
+      targetY,
+    )
+
+    this.visual.rotation.z = THREE.MathUtils.damp(
+      this.visual.rotation.z,
+      this.sinkPitch,
+      0.7,
+      delta,
+    )
+
+    if (Math.abs(this.root.position.y - targetY) <= 0.5) {
+      this.root.position.y = targetY
+      this.visual.rotation.z = this.sinkPitch
+      this.isSink = true
+    }
   }
 
   handleCollision(_event: CollisionEvent, self: CollisionEntitySnapshot): void {
@@ -221,9 +254,9 @@ export class CargoShipController implements Updatable {
 
     //碰撞情景
     let CollisionSituation: CollisionSituationType
-    CollisionSituation=CollisionDecision(_event)
-    
-    switch(CollisionSituation){
+    CollisionSituation = CollisionDecision(_event)
+
+    switch (CollisionSituation) {
       case CollisionSituationType.Submarine_Hits_Submarine:
         break
 
@@ -235,8 +268,8 @@ export class CargoShipController implements Updatable {
       case CollisionSituationType.Cargoship_Hits_Cargoship:
 
         //停船，并反向行驶
-        this.currentSpeed=0
-        this.heading=this.heading*-1
+        this.currentSpeed = 0
+        this.heading = this.heading * -1
         break
 
       case CollisionSituationType.Torpedor_Hits_Submarine:
@@ -246,10 +279,7 @@ export class CargoShipController implements Updatable {
       case CollisionSituationType.Torpedor_Hits_Cargoship:
 
         //货船被击沉
-        this.currentSpeed=0
-        this.isDestroyed=true
-        //在被击中的那一次播放爆炸动画
-        /***********/
+        this.destroy()
 
         //向后端更新Convoy信息，该船被击沉
 

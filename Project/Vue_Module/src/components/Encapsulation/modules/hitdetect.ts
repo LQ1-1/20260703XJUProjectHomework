@@ -76,7 +76,7 @@ interface SphereHit {
 }
 
 const DEFAULT_OPTIONS: Required<Omit<HitDetectSystemOptions, 'scene'>> = {
-  debugVisible: true,   //显示包围碰撞检测球，用于调试
+  debugVisible: false,   //显示包围碰撞检测球，用于调试
   logCollisions: true,
 }
 
@@ -147,6 +147,7 @@ export class HitDetectSystem implements Updatable {
         yLayerRatio: COLLISION_CONFIG.submarine.yLayerRatio,
         radius: submarine.modelLength * COLLISION_CONFIG.submarine.radiusRatio,
       }),
+      isEnabled: () => !submarine.isSink,
     })
   }
 
@@ -163,7 +164,7 @@ export class HitDetectSystem implements Updatable {
         yLayerRatio: COLLISION_CONFIG.cargoShip.yLayerRatio,
         radius: ship.modelLength * COLLISION_CONFIG.cargoShip.radiusRatio,
       }),
-      isEnabled: () => !ship.isDestroyed,
+      isEnabled: () => !ship.isSink,
     })
   }
 

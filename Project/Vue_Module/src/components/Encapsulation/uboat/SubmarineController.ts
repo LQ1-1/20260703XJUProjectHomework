@@ -40,11 +40,15 @@ import {
   METERS_TO_SCENE,
   MODEL_LENGTH_SCENE,
   SURFACE_MODEL_OFFSET,
+  SINK_DEPTH,
 } from '../constant/sceneUnits.ts'
 import { ExplosionSplashEffect } from '../ExplosionSplashEffect/explosionSplashEffect.ts'
 import { GameEntityRegistry } from '../entitymanager/GameEntityRegistry.ts'
 import { TorpedorController } from '../torpedor/TorpedorController.ts'
 import type { TorpedoLaunchPlan } from '../torpedor/torpedoTypes.ts'
+
+export const TORPEDO_FORWARD_OFFSET_FROM_THE_BOW = 3.5
+export const TORPEDO_LATERAL_OFFSET_FROM_THE_CENTERLINE=1
 
 
 export interface SubmarineOptions {
@@ -114,6 +118,7 @@ export class SubmarineController implements Updatable {
   // ---- 内部状态 ----
   private movementDelta = new THREE.Vector3()
   private readonly maxPitch = THREE.MathUtils.degToRad(60)
+  private readonly sinkPitch = THREE.MathUtils.degToRad(-60)
   private readonly pitchResponseSensitivity = 17
   private readonly pitchSmoothing = 1.04
   private lastHudUpdateTime = 0
@@ -125,7 +130,8 @@ export class SubmarineController implements Updatable {
   private torpedorCount: number = 14; //鱼雷数量固定14发
 
   //---- 是否被击沉 ----
-  private isDestroyed=false
+  public isDestroyed = false
+  public isSink = false //是否已经沉底，沉底后碰撞检测失效
 
   // ---- HUD 回调（由 Vue 组件注入） ----
   onHudUpdate?: (data: {
@@ -167,8 +173,8 @@ export class SubmarineController implements Updatable {
     } else if (options.coordinateCode) {
       const mapCode = new MapCode(0, 0)
       const worldPos = mapCode.getWorldLocation(options.coordinateCode)
-      initialPosition=new THREE.Vector3(worldPos.first, 0 , worldPos.second)
-    }else{
+      initialPosition = new THREE.Vector3(worldPos.first, 0, worldPos.second)
+    } else {
       throw new Error('SubmarineOptions requires either coordinateCode or worldPositon')
     }
 
@@ -198,12 +204,12 @@ export class SubmarineController implements Updatable {
 
     // 6. 注册到引擎更新循环
     const controller = new SubmarineController(
-      engine, 
-      input, 
-      cameraCtrl, 
-      root, 
-      visual, 
-      options, 
+      engine,
+      input,
+      cameraCtrl,
+      root,
+      visual,
+      options,
       modelSize.x,
       modelSize.y,
 
@@ -250,7 +256,7 @@ export class SubmarineController implements Updatable {
     this.modelHeight = modelHeight
     this.torpedoModelUrl = options.torpedoModelUrl
 
-    this.entityRegistry=entityRegistry
+    this.entityRegistry = entityRegistry
 
     // 初始航向由 root.rotation.y 决定（已在工厂中设置）
     this.heading = root.rotation.y
@@ -299,6 +305,22 @@ export class SubmarineController implements Updatable {
   // ==================== 每帧更新（由 GameEngine 调用） ====================
 
   update(delta: number, time: number): void {
+    if (this.isDestroyed) {
+      this.updateSinking(delta)
+
+      if (this.isPlayerControlled) {
+        this.cameraCtrl.update(this)
+        this.engine.updateSunAndLight(this.root.position)
+        this.engine.updateUnderwaterAppearance(this.currentDepth, this.depthMeters)
+
+        if (time - this.lastHudUpdateTime >= 100) {
+          this.lastHudUpdateTime = time
+          this.emitHudUpdate()
+        }
+      }
+      return
+    }
+
     if (!this.isPlayerControlled) {
       // AI 潜艇：仅更新水平运动和高度
       this.updateHorizontalMovement(delta)
@@ -555,6 +577,39 @@ export class SubmarineController implements Updatable {
     )
   }
 
+  private updateSinking(delta: number): void {
+    if (this.isSink) return
+
+    this.currentSpeed = 0
+    this.verticalSpeed = 0
+    this.targetDepth = SINK_DEPTH
+    this.currentDepth = Math.min(SINK_DEPTH, Math.max(this.currentDepth, -this.root.position.y))
+
+    const targetY = -SINK_DEPTH
+    const sinkSpeed = 3 // 场景单位/秒
+    this.root.position.y = Math.max(
+      this.root.position.y - sinkSpeed * delta,
+      targetY,
+    )
+    this.currentDepth = Math.min(SINK_DEPTH, Math.max(0, -this.root.position.y))
+
+    if (this.visual) {
+      this.visual.rotation.z = THREE.MathUtils.damp(
+        this.visual.rotation.z,
+        this.sinkPitch,
+        0.7,
+        delta,
+      )
+    }
+
+    if (Math.abs(this.root.position.y - targetY) <= 0.5) {
+      this.root.position.y = targetY
+      this.currentDepth = SINK_DEPTH
+      if (this.visual) this.visual.rotation.z = this.sinkPitch
+      this.isSink = true
+    }
+  }
+
   // ==================== 速度限制 ====================
 
   private currentForwardSpeedLimit(): number {
@@ -614,10 +669,10 @@ export class SubmarineController implements Updatable {
     const tubeOffsetIndex = plan.tubeId - 2.5
     const initialPosition = this.root.position
       .clone()
-      .add(forward.multiplyScalar(this.modelLength * 0.55 + 5))
-      .add(right.multiplyScalar(tubeOffsetIndex * this.modelLength * 0.035))
+      .add(forward.multiplyScalar(this.modelLength * 0.55 + TORPEDO_FORWARD_OFFSET_FROM_THE_BOW))
+      .add(right.multiplyScalar(tubeOffsetIndex * this.modelLength * 0.035+TORPEDO_LATERAL_OFFSET_FROM_THE_CENTERLINE))
 
-    const torpedo = await TorpedorController.create({
+    const torpedo = await TorpedorController.create(this.engine, {
       id: `${this.id}-torpedo-${Date.now()}-${plan.tubeId}`,
       ownerId: this.id,
       torpedoType: plan.torpedoType,
@@ -629,10 +684,7 @@ export class SubmarineController implements Updatable {
       entityRegistry: this.entityRegistry,
     })
 
-    this.engine.scene.add(torpedo.root)
-    this.engine.addUpdatable(torpedo)
     this.setTorpedorCount(this.torpedorCount - 1)
-
     return torpedo
   }
 
@@ -676,44 +728,44 @@ export class SubmarineController implements Updatable {
     //TEST
     // console.log(`Hi! This is U-822! a type: ${_event.a.type}, b type: ${_event.b.type}`)
 
-        //碰撞情景
-        let CollisionSituation: CollisionSituationType
-        CollisionSituation=CollisionDecision(_event)
-        
-        switch(CollisionSituation){
-          case CollisionSituationType.Submarine_Hits_Submarine:
-            //两艇停船
-            this.currentSpeed=-1.5
-            break
+    //碰撞情景
+    let CollisionSituation: CollisionSituationType
+    CollisionSituation = CollisionDecision(_event)
 
-          case CollisionSituationType.Submarine_Hits_Cargoship:
-            //潜艇停船，商船不变
-            this.currentSpeed=-1.5
+    switch (CollisionSituation) {
+      case CollisionSituationType.Submarine_Hits_Submarine:
+        //两艇停船
+        this.currentSpeed = -1.5
+        break
 
-            break
-    
-          case CollisionSituationType.Cargoship_Hits_Cargoship:
-            break
-    
-    
-          case CollisionSituationType.Torpedor_Hits_Submarine:
-            //潜艇被击沉
-            this.currentSpeed=0
-            this.isDestroyed=true
+      case CollisionSituationType.Submarine_Hits_Cargoship:
+        //潜艇停船，商船不变
+        this.currentSpeed = -1.5
 
-            //播放爆炸动画
-            /********/
+        break
 
-            //向后端更新Wolfpack信息，该潜艇已被击沉
+      case CollisionSituationType.Cargoship_Hits_Cargoship:
+        break
 
-            break
-    
-          case CollisionSituationType.Torpedor_Hits_Cargoship:
-            break
-    
-    
-    
-        }
+
+      case CollisionSituationType.Torpedor_Hits_Submarine:
+        //潜艇被击沉
+        this.currentSpeed = 0
+        this.isDestroyed = true
+
+        //播放爆炸动画
+        /********/
+
+        //向后端更新Wolfpack信息，该潜艇已被击沉
+
+        break
+
+      case CollisionSituationType.Torpedor_Hits_Cargoship:
+        break
+
+
+
+    }
 
   }
 

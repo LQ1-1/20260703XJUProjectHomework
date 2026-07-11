@@ -291,14 +291,6 @@ onMounted(async () => {
     console.log(`货船高度: ${cargoShips[0]?.modelHeight}`)
     targetDefaultHeight.value = cargoShips[0]?.modelHeight ?? 0
 
-    // console.log('爆炸特效测试')
-    // const effectTest=new ExplosionSplashEffect({position: new THREE.Vector3(1000, 0, 640),})
-    // effectTest.onFinished=(finishedEffect)=>{
-    // engine?.removeUpdatable(finishedEffect)
-    // }
-    // engine.scene.add(effectTest.root)
-    // engine.addUpdatable(effectTest)
-
     // 注册到引擎更新循环
     for (const ship of cargoShips) {
       engine.addUpdatable(ship)

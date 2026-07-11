@@ -140,16 +140,8 @@ function handleUseRangeDistance(distance: number): void {
       <div>
         <dt>航速</dt>
         <dd>{{ speedKnots.toFixed(1) }} kn</dd>
-        <select
-          v-model="selectedSpeedFraction"
-          class="instrument-select"
-          aria-label="航速指令"
-        >
-          <option
-            v-for="opt in SPEED_OPTIONS"
-            :key="opt.value"
-            :value="opt.value"
-          >
+        <select v-model="selectedSpeedFraction" class="instrument-select" aria-label="航速指令">
+          <option v-for="opt in SPEED_OPTIONS" :key="opt.value" :value="opt.value">
             {{ opt.label }}
           </option>
         </select>
@@ -157,16 +149,8 @@ function handleUseRangeDistance(distance: number): void {
       <div>
         <dt>航向</dt>
         <dd>{{ headingDegrees.toFixed(0).padStart(3, '0') }}°</dd>
-        <select
-          v-model="selectedHeadingString"
-          class="instrument-select"
-          aria-label="航向指令"
-        >
-          <option
-            v-for="opt in HEADING_OPTIONS"
-            :key="opt.value"
-            :value="opt.value"
-          >
+        <select v-model="selectedHeadingString" class="instrument-select" aria-label="航向指令">
+          <option v-for="opt in HEADING_OPTIONS" :key="opt.value" :value="opt.value">
             {{ opt.label }}
           </option>
         </select>
@@ -187,17 +171,6 @@ function handleUseRangeDistance(distance: number): void {
 
     <div class="computer-switches" aria-label="计算机开关">
       <fieldset>
-        <legend>是否打开鱼雷弹道计算机</legend>
-        <label>
-          <input v-model="showTorpedoComputer" type="radio" :value="true" />
-          true
-        </label>
-        <label>
-          <input v-model="showTorpedoComputer" type="radio" :value="false" />
-          false
-        </label>
-      </fieldset>
-      <fieldset>
         <legend>是否打开测距计算机</legend>
         <label>
           <input v-model="showRangeComputer" type="radio" :value="true" />
@@ -208,26 +181,29 @@ function handleUseRangeDistance(distance: number): void {
           false
         </label>
       </fieldset>
+      <fieldset>
+        <legend>是否打开鱼雷弹道计算机</legend>
+        <label>
+          <input v-model="showTorpedoComputer" type="radio" :value="true" />
+          true
+        </label>
+        <label>
+          <input v-model="showTorpedoComputer" type="radio" :value="false" />
+          false
+        </label>
+      </fieldset>
     </div>
 
     <div v-if="showTorpedoComputer || showRangeComputer" class="computer-stack">
-      <TorpedorDataComputer
-        v-if="showTorpedoComputer"
-        ref="torpedoComputerRef"
-        :heading-degrees="headingDegrees"
-        :current-depth-meters="depthMeters"
-        :remaining-torpedoes="remainingTorpedoes"
-      />
-      <RangeComputer
-        v-if="showRangeComputer"
-        :default-target-height="targetDefaultHeight"
-        @use-distance="handleUseRangeDistance"
-      />
+      <RangeComputer v-if="showRangeComputer" :default-target-height="targetDefaultHeight"
+        @use-distance="handleUseRangeDistance" />
+
+      <TorpedorDataComputer v-if="showTorpedoComputer" ref="torpedoComputerRef" :heading-degrees="headingDegrees"
+        :current-depth-meters="depthMeters" :remaining-torpedoes="remainingTorpedoes" />
+
     </div>
 
-    <BearingCompassPanel
-      :heading-degrees="headingDegrees"
-      :periscope-relative-bearing-degrees="periscopeRelativeBearingDegrees"
-    />
+    <BearingCompassPanel :heading-degrees="headingDegrees"
+      :periscope-relative-bearing-degrees="periscopeRelativeBearingDegrees" />
   </aside>
 </template>
