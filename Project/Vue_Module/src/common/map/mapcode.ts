@@ -1,8 +1,12 @@
+
+export const OFFSETSENSITIVITY = 200    //偏移灵敏度，鼠标移动1个像素，相对于在地图上移动200个单位的长度
+
 export class myPair<T, U> {
     constructor(public first: T, public second: U) { }
     //first=X; second=Z
 }
 
+//本游戏地图的工具类
 export class MapCode {
     //游戏区域是X:0到12150， Z:0到12150
     //超出区域视为脱离游戏区域
@@ -11,11 +15,11 @@ export class MapCode {
     public x: number
     public z: number
 
-    public MapSize = 12150.0
+    public MapSize: number = 12150.0
 
-    public sizeLevel1 = 4050.0
-    public sizeLevel2 = 1350.0
-    public sizeLevel3 = 450.0
+    public sizeLevel1: number = 4050.0
+    public sizeLevel2: number = 1350.0
+    public sizeLevel3: number = 450.0
 
     public gridMapLevel1 = new Map<string, string>()
     public gridMapLevel2 = new Map<string, string>()
@@ -24,7 +28,7 @@ export class MapCode {
     public gridMapLevel2_nummap = new Map<string, myPair<number, number>>()
 
 
-    constructor(x: number, z: number) {
+    constructor(x: number=0, z: number=0) {
         this.x = x
         this.z = z
 
@@ -167,8 +171,133 @@ export class MapCode {
     gridKey(row: number, col: number) {
         return `${row}:${col}`
     }
+
+    //根据layer返回一个瓦片图对应的地图的边的长度（游戏地图单位）
+    private getTileLayerSize(layer: number) {
+        if (layer === 0) {
+            return this.sizeLevel1
+        }
+
+        if (layer === 1) {
+            return this.sizeLevel2
+        }
+
+        return this.sizeLevel3
+    }
+
+    //获取layer对应的瓦片的行数（列数）
+    private getTileLayerCount(layer: number) {
+        if (layer === 0) {
+            return 3
+        }
+
+        if (layer === 1) {
+            return 9
+        }
+
+        return 27
+    }
+
+    //封装图片读取路径
+    private getTileMapPath(layer: number, column: number, row: number) {
+        return new URL(
+            `../../assets/Tile Maps/tiles/${layer}/tile_${column}_${row}.png`,
+            import.meta.url,
+        ).href
+    }
+
+    private getTileMapsByCenter(centerX: number, centerZ: number, layer: number) {
+        const tileSize = this.getTileLayerSize(layer)   //对应的层级的瓦片地图对应的的地图长度不同
+        const tileCount = this.getTileLayerCount(layer)
+        const maxTileIndex = tileCount - 1  //瓦片地图的行号，列号边界
+
+        const column = Math.floor(centerX / tileSize)   //地图坐标转换成列
+        const row = Math.floor(centerZ / tileSize)      //地图坐标转换成行
+
+        const offsets: number[] = [-1, 0, 1]
+        const pathResults: string[] = []
+
+        for (let dz of offsets) {
+            for (let dx of offsets) {
+                const newRow = row + dz
+                const newColumn = column + dx
+
+                if (
+                    newRow >= 0 &&
+                    newRow <= maxTileIndex &&
+                    newColumn >= 0 &&
+                    newColumn <= maxTileIndex
+                ) {
+                    pathResults.push(this.getTileMapPath(layer, newColumn, newRow))
+                }
+            }
+        }
+
+        return pathResults
+    }
+
+    //随着玩家控制的潜艇移动而动态加载瓦片地图的函数
+    getTileMapsPlayerCenter(Zoom: number){
+        let scrollZoom = this.getTileMapLayer(Zoom)
+
+        return this.getTileMapsByCenter(this.x, this.z, scrollZoom)
+    }
+    /*
+    调用方式
+    let mapCode =new MapCode(playerX, playerZ)
+    let mapPaths: string[] = mapCode.getTileMapsPlayerCenter(playerZoom)
+    */
+
+
+    //----------------处理滚动缩放的瓦片地图加载地图-------------------//
+    //改变大小
+    private zoom: number=1  //放大倍率
+
+    //改变位置
+    //相当于一个二维向量
+    //相对原始位置进行偏移
+    private offsetX: number=0   //X轴偏移量
+    private offsetZ: number=0   //Z轴偏移量
+
+    public mapSize: number=1350.0
+
+    updateScrollZoomParas(newZoom: number, newOffsetX: number, newOffsetZ:number){
+        this.zoom=newZoom
+        this.offsetX=newOffsetX
+        this.offsetZ=newOffsetZ
+    }
+
+    getTileMapLayer(Zoom: number): number {
+        if(Zoom<1){
+            return 0
+        }else if(Zoom<2){
+            return 1
+        }else{
+            return 2
+        }
+    }
+
+    getTileMapsMouseDrag(){
+        let layer=this.getTileMapLayer(this.zoom)
+        let newCenterX = this.x - this.offsetX * OFFSETSENSITIVITY
+        let newCenterZ = this.z - this.offsetZ * OFFSETSENSITIVITY
+
+        return this.getTileMapsByCenter(newCenterX, newCenterZ, layer)
+    
+    }
+    /*
+    调用方式
+    let mapCode = new MapCode()
+    mapCode.updateScrollZoomParas(鼠标缩放倍率, 鼠标移动x像素(横向), 鼠标移动z像素(纵向))
+    let mapPaths: string[]= mapCode.getTileMapsMouseDrag()
+    */
+
+
+    //------------------------------------------------------------------//
+
 }
 
 
 // let test2=new MapCode(0,0);
 // console.log(`1000, 550对应的Code是AD16,经过转换: ${test2.getWorldLocation('AD16').first}, ${test2.getWorldLocation('AD16').second}`);
+

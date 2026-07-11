@@ -1,7 +1,7 @@
 import { createCanvas } from 'canvas'
 import { writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { MapCode } from './mapcode'
+import { MapCode } from '../mapcode'
 
 const MAP_SIZE = 1350
 const CELL_SIZE = 450
@@ -33,9 +33,9 @@ for (let row = 0; row < CELL_COUNT; row++) {
     const z = row * CELL_SIZE
 
     const mapCode = new MapCode(x, z)
-    const text =codes[index];
-    index++
-    // const text=mapCode.getLocationCode()
+    // const text =codes[index];
+    // index++
+    const text=mapCode.getLocationCode()
 
     // 当前格子的背景
     ctx.fillStyle = 'rgb(211, 211, 211)'
