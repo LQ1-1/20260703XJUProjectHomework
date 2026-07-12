@@ -1,5 +1,6 @@
 
 export const OFFSETSENSITIVITY = 200    //偏移灵敏度，鼠标移动1个像素，相对于在地图上移动200个单位的长度
+export const TILEMAPPICTURESIZE = 450   //瓦片地图的大小统一是 450* 450
 
 export class myPair<T, U> {
     constructor(public first: T, public second: U) { }
@@ -20,6 +21,8 @@ export class MapCode {
     public sizeLevel1: number = 4050.0
     public sizeLevel2: number = 1350.0
     public sizeLevel3: number = 450.0
+    public sizeLevel4: number = 150.0
+    public sizeLevel5: number = 50.0
 
     public gridMapLevel1 = new Map<string, string>()
     public gridMapLevel2 = new Map<string, string>()
@@ -294,6 +297,39 @@ export class MapCode {
 
 
     //------------------------------------------------------------------//
+
+
+    //在地图上标记潜艇当前的位置
+    currentPositionOnTheMap(zoom: number){
+        let layer = this.getTileMapLayer(zoom)
+
+        //计算出当前坐标在所在格的相对位置
+        let length: number = this.sizeLevel2
+        if(layer === 0){
+            length = this.sizeLevel1
+        }else if(layer === 1){
+            length = this.sizeLevel2
+        }else if(layer === 2){
+            length = this.sizeLevel3
+        }
+
+
+        let x_offset = this.x%length
+        let z_offset = this.z%length
+
+        let x_offset_pixel=x_offset/length*TILEMAPPICTURESIZE   //应该在瓦片地图上水平偏移多少
+        let z_offset_pixel=z_offset/length*TILEMAPPICTURESIZE   //应该在瓦片地图上纵向偏移多少
+        let result={
+            xOffset: x_offset,
+            zOffset:z_offset
+        }
+        return result
+    }
+    /*
+    使用方法
+    let mapCode = new MapCode(plaerX, playerZ)
+    let OffsetXZ=mapCode.currentPositionOnTheMap(currentZoom)
+    */
 
 }
 

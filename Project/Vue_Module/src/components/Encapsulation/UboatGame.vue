@@ -13,6 +13,7 @@ import { tuneSunMaterials, disposeObject } from './modules/modelUtils.ts'
 import { HitDetectSystem } from './modules/hitdetect.ts'
 import UnderwaterStatusPanel from './panel/UnderwaterStatusPanel.vue'
 import { headingStringToDegrees } from './modules/navigationMath.ts'
+import VoyageMap from '../../common/map/voyagemap.vue'
 
 import submarineUrl from '../../model/type_vii_d_u-boat.glb?url'
 import cargoshipUrl from '../../model/liberty_ship.glb?url'
@@ -253,6 +254,10 @@ onMounted(async () => {
       entityRegistry
       })
 
+    submarineWorldX.value = submarine.root.position.x
+    submarineWorldZ.value = submarine.root.position.z
+    headingDegrees.value = submarine.compassHeading
+
     // HUD 回调
     submarine.onHudUpdate = (data) => {
       speedKmh.value = data.speedKmh
@@ -418,6 +423,13 @@ onBeforeUnmount(() => {
       :commanded-speed-fraction="commandedSpeedFraction"
       @speed-command="handleSpeedCommand"
       @heading-command="handleHeadingCommand"
+    />
+
+    <VoyageMap
+      v-if="isLoaded"
+      :submarine-world-x="submarineWorldX"
+      :submarine-world-z="submarineWorldZ"
+      :heading-degrees="headingDegrees"
     />
 
     <!-- 潜望镜/水面瞄准叠加层 -->
