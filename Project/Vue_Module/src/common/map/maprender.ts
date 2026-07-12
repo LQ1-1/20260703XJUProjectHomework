@@ -21,7 +21,7 @@ const MAP_SIZE = 12150
 const TILE_IMAGE_SIZE = 450
 const BASE_WORLD_TILE_SIZE = 4050
 const DEFAULT_MIN_ZOOM = 0.5
-const DEFAULT_MAX_ZOOM = 3
+const DEFAULT_MAX_ZOOM = 4.99
 const DEFAULT_ZOOM = 1
 const INDICATOR_SIZE = 28
 const TRACK_ARROW_SIZE = 8
@@ -54,8 +54,7 @@ export class MapRender {
     this.maxZoom = options.maxZoom ?? DEFAULT_MAX_ZOOM
 
     const indicatorUrl =
-      options.indicatorUrl ??
-      new URL('../../assets/Bearing Dial/hullMapIndicator.png', import.meta.url).href
+      options.indicatorUrl ?? '/assets/Bearing Dial/hullMapIndicator.png'
     this.indicatorImage = this.loadImage(indicatorUrl)
 
     this.resize()
@@ -247,26 +246,35 @@ export class MapRender {
   }
 
   private getPixelsPerWorldUnit(): number {
+    const layer = this.mapCode.getTileMapLayer(this.zoom)
+
+    if (layer >= 4) {
+      const tileWorldSize = this.getTileWorldSize(layer)
+      const layerLocalZoom = 0.85 + (this.zoom - layer) * 0.055
+      return (TILE_IMAGE_SIZE / tileWorldSize) * layerLocalZoom
+    }
+
     return (TILE_IMAGE_SIZE / BASE_WORLD_TILE_SIZE) * this.zoom
   }
 
   private getTileWorldSize(layer: number): number {
     if (layer === 0) return 4050
     if (layer === 1) return 1350
-    return 450
+    if (layer === 2) return 450
+    if (layer === 3) return 150
+    return 50
   }
 
   private getTileCount(layer: number): number {
     if (layer === 0) return 3
     if (layer === 1) return 9
-    return 27
+    if (layer === 2) return 27
+    if (layer === 3) return 81
+    return 243
   }
 
   private getTileMapPath(layer: number, column: number, row: number): string {
-    return new URL(
-      `../../assets/Tile Maps/tiles/${layer}/tile_${column}_${row}.png`,
-      import.meta.url,
-    ).href
+    return `/assets/Tile Maps/tiles/${layer}/tile_${column}_${row}.png`
   }
 
   private clampPoint(point: MapPoint): MapPoint {

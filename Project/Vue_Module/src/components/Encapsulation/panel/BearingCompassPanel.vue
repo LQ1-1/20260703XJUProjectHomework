@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import marineCompassUrl from '../../../assets/Bearing Dial/MarineCompass_0.png?url'
-import relativeBearingDialUrl from '../../../assets/Bearing Dial/RelativeBearingDial_0.png?url'
-import hullIndicatorUrl from '../../../assets/Bearing Dial/hullIndicator.png?url'
 import '../../../css/bearing-compass-panel.css'
+
+const marineCompassUrl = '/assets/Bearing Dial/MarineCompass_0.png'
+const relativeBearingDialUrl = '/assets/Bearing Dial/RelativeBearingDial_0.png'
+const hullIndicatorUrl = '/assets/Bearing Dial/hullIndicator.png'
 
 const props = defineProps<{
   headingDegrees: number

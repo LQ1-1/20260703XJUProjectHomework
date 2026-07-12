@@ -2,7 +2,7 @@ import { createCanvas } from 'canvas'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 
-const OUTPUT_ROOT = resolve(process.cwd(), 'src/assets/Tile Maps/numbered-tiles')
+const OUTPUT_ROOT = resolve(process.cwd(), 'public/assets/Tile Maps/tiles')
 
 const IMAGE_TILE_SIZE = 450
 const FULL_MAP_WORLD_SIZE = 12150
@@ -10,7 +10,7 @@ const BASE_CODES = ['AD', 'AE', 'AF', 'AK', 'AL', 'AM', 'BD', 'BE', 'BF']
 const CHILD_CODES = ['1', '2', '3', '4', '5', '6', '7', '8', '9']
 
 interface TileManifestItem {
-  level: 0 | 1 | 2
+  level: number
   column: number
   row: number
   filename: string
@@ -24,27 +24,14 @@ interface TileManifestItem {
 }
 
 interface LevelConfig {
-  level: 0 | 1 | 2
+  level: number
   gridSize: number
   worldTileSize: number
 }
 
 const LEVELS: LevelConfig[] = [
-  {
-    level: 0,
-    gridSize: 3,
-    worldTileSize: 4050,
-  },
-  {
-    level: 1,
-    gridSize: 9,
-    worldTileSize: 1350,
-  },
-  {
-    level: 2,
-    gridSize: 27,
-    worldTileSize: 450,
-  },
+  { level: 3, gridSize: 81, worldTileSize: 150 },
+  { level: 4, gridSize: 243, worldTileSize: 50 },
 ]
 
 function getGridCode(column: number, row: number): string {
@@ -67,46 +54,20 @@ function getBaseCode(column: number, row: number): string {
   return code
 }
 
-function getLevel1Code(column: number, row: number): string {
-  const baseColumn = Math.floor(column / 3)
-  const baseRow = Math.floor(row / 3)
-  const childColumn = column % 3
-  const childRow = row % 3
+function getTileCode(level: number, column: number, row: number): string {
+  const baseDivisor = 3 ** level
+  const baseColumn = Math.floor(column / baseDivisor)
+  const baseRow = Math.floor(row / baseDivisor)
+  const childCodes: string[] = []
 
-  return `${getBaseCode(baseColumn, baseRow)}${getGridCode(childColumn, childRow)}`
-}
-
-function getLevel0Code(column: number, row: number): string {
-  return getBaseCode(column, row)
-}
-
-function getLevel2Code(column: number, row: number): string {
-  const baseColumn = Math.floor(column / 9)
-  const baseRow = Math.floor(row / 9)
-
-  const level1Column = Math.floor((column % 9) / 3)
-  const level1Row = Math.floor((row % 9) / 3)
-
-  const level2Column = column % 3
-  const level2Row = row % 3
-
-  return [
-    getBaseCode(baseColumn, baseRow),
-    getGridCode(level1Column, level1Row),
-    getGridCode(level2Column, level2Row),
-  ].join('')
-}
-
-function getTileCode(level: 0 | 1 | 2, column: number, row: number): string {
-  if (level === 0) {
-    return getLevel0Code(column, row)
+  for (let depth = level - 1; depth >= 0; depth--) {
+    const divisor = 3 ** depth
+    const childColumn = Math.floor((column % (divisor * 3)) / divisor)
+    const childRow = Math.floor((row % (divisor * 3)) / divisor)
+    childCodes.push(getGridCode(childColumn, childRow))
   }
 
-  if (level === 1) {
-    return getLevel1Code(column, row)
-  }
-
-  return getLevel2Code(column, row)
+  return [getBaseCode(baseColumn, baseRow), ...childCodes].join('')
 }
 
 function createTilePng(code: string): Buffer {
@@ -121,7 +82,7 @@ function createTilePng(code: string): Buffer {
   ctx.strokeRect(1.5, 1.5, IMAGE_TILE_SIZE - 3, IMAGE_TILE_SIZE - 3)
 
   ctx.fillStyle = 'rgb(0, 0, 0)'
-  ctx.font = 'bold 72px sans-serif'
+  ctx.font = `bold ${code.length > 5 ? 54 : 72}px sans-serif`
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
   ctx.fillText(code, IMAGE_TILE_SIZE / 2, IMAGE_TILE_SIZE / 2, IMAGE_TILE_SIZE * 0.9)

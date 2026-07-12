@@ -14,11 +14,6 @@ import { HitDetectSystem } from './modules/hitdetect.ts'
 import UnderwaterStatusPanel from './panel/UnderwaterStatusPanel.vue'
 import { headingStringToDegrees } from './modules/navigationMath.ts'
 
-import submarineUrl from '../../model/type_vii_d_u-boat.glb?url'
-import cargoshipUrl from '../../model/liberty_ship.glb?url'
-import torpedoUrl from '../../model/mkxii_torpedo.glb?url'
-import sunUrl from '../../model/sun.glb?url'
-import periscopeSightUrl from '../../assets/Uboot Periscope sight/UBootPeriscopeAimingSight.png?url'
 import '../../css/test-3d-programized-ocean.css'
 
 import { v4 as uuidv4 } from 'uuid'
@@ -27,6 +22,12 @@ import { GameEntityRegistry } from './entitymanager/GameEntityRegistry.ts'
 import type { TorpedoLaunchPlan } from './torpedor/torpedoTypes.ts'
 
 import { CARGOSHIP_HIGHT_SCENE } from './constant/sceneUnits.ts'
+
+const submarineUrl = '/assets/model/type_vii_d_u-boat.glb'
+const cargoshipUrl = '/assets/model/liberty_ship.glb'
+const torpedoUrl = '/assets/model/mkxii_torpedo.glb'
+const sunUrl = '/assets/model/sun.glb'
+const periscopeSightUrl = '/assets/Uboot Periscope sight/UBootPeriscopeAimingSight.png'
 
 //------本地测试的版本(尚未和后端服务器进行交互)-------//
 

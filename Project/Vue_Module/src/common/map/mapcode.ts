@@ -31,7 +31,7 @@ export class MapCode {
     public gridMapLevel2_nummap = new Map<string, myPair<number, number>>()
 
 
-    constructor(x: number=0, z: number=0) {
+    constructor(x: number = 0, z: number = 0) {
         this.x = x
         this.z = z
 
@@ -66,30 +66,30 @@ export class MapCode {
         this.gridMapLevel2.set(this.gridKey(2, 2), '9')
 
         //初始化code->number
-        this.gridMapLevel1_nummap.set('AD', new myPair<number,number>(0,0))
-        this.gridMapLevel1_nummap.set('AE', new myPair<number,number>(1, 0))
-        this.gridMapLevel1_nummap.set('AF', new myPair<number,number>(2, 0))
+        this.gridMapLevel1_nummap.set('AD', new myPair<number, number>(0, 0))
+        this.gridMapLevel1_nummap.set('AE', new myPair<number, number>(1, 0))
+        this.gridMapLevel1_nummap.set('AF', new myPair<number, number>(2, 0))
 
-        this.gridMapLevel1_nummap.set('AK', new myPair<number,number>(0, 1))
-        this.gridMapLevel1_nummap.set('AL', new myPair<number,number>(1, 1))
-        this.gridMapLevel1_nummap.set('AM', new myPair<number,number>(2, 1))
+        this.gridMapLevel1_nummap.set('AK', new myPair<number, number>(0, 1))
+        this.gridMapLevel1_nummap.set('AL', new myPair<number, number>(1, 1))
+        this.gridMapLevel1_nummap.set('AM', new myPair<number, number>(2, 1))
 
-        this.gridMapLevel1_nummap.set('BD', new myPair<number,number>(0, 2))
-        this.gridMapLevel1_nummap.set('BE', new myPair<number,number>(1, 2))
-        this.gridMapLevel1_nummap.set('BF', new myPair<number,number>(2, 2))
+        this.gridMapLevel1_nummap.set('BD', new myPair<number, number>(0, 2))
+        this.gridMapLevel1_nummap.set('BE', new myPair<number, number>(1, 2))
+        this.gridMapLevel1_nummap.set('BF', new myPair<number, number>(2, 2))
 
 
-        this.gridMapLevel2_nummap.set('1', new myPair<number,number>(0, 0))
-        this.gridMapLevel2_nummap.set('2', new myPair<number,number>(1, 0))
-        this.gridMapLevel2_nummap.set('3', new myPair<number,number>(2, 0))
+        this.gridMapLevel2_nummap.set('1', new myPair<number, number>(0, 0))
+        this.gridMapLevel2_nummap.set('2', new myPair<number, number>(1, 0))
+        this.gridMapLevel2_nummap.set('3', new myPair<number, number>(2, 0))
 
-        this.gridMapLevel2_nummap.set('4', new myPair<number,number>(0, 1))
-        this.gridMapLevel2_nummap.set('5', new myPair<number,number>(1, 1))
-        this.gridMapLevel2_nummap.set('6', new myPair<number,number>(2, 1))
+        this.gridMapLevel2_nummap.set('4', new myPair<number, number>(0, 1))
+        this.gridMapLevel2_nummap.set('5', new myPair<number, number>(1, 1))
+        this.gridMapLevel2_nummap.set('6', new myPair<number, number>(2, 1))
 
-        this.gridMapLevel2_nummap.set('7', new myPair<number,number>(0, 2))
-        this.gridMapLevel2_nummap.set('8', new myPair<number,number>(1, 2))
-        this.gridMapLevel2_nummap.set('9', new myPair<number,number>(2, 2))
+        this.gridMapLevel2_nummap.set('7', new myPair<number, number>(0, 2))
+        this.gridMapLevel2_nummap.set('8', new myPair<number, number>(1, 2))
+        this.gridMapLevel2_nummap.set('9', new myPair<number, number>(2, 2))
 
     }
 
@@ -97,7 +97,7 @@ export class MapCode {
     //返回区域代码如AD516这种
     getLocationCode() {
 
-        if (this.x < 0 || this.x > this.MapSize || this.z < 0 || this.z > this.MapSize) {
+        if (this.x < 0 || this.x >= this.MapSize || this.z < 0 || this.z >= this.MapSize) {
             return '0_Out of Game Area'
         }
 
@@ -131,42 +131,76 @@ export class MapCode {
 
         console.log(`level_3_x: ${level_3_x}; level_3_z: ${level_3_z}; level3_location: ${level3_location}`)
 
+        //4. 锁定第四层
+        let fourth_x = this.x % this.sizeLevel3
+        let fourth_z = this.z % this.sizeLevel3
+
+        let level_4_x = Math.floor(fourth_x / this.sizeLevel4)
+        let level_4_z = Math.floor(fourth_z / this.sizeLevel4)
+
+        let level4_location = this.gridMapLevel2.get(this.gridKey(level_4_x, level_4_z))
+
+        console.log(`level4_location: ${level4_location}`)
+
+        //5.锁定第五层
+        let fifth_x = this.x % this.sizeLevel4
+        let fifth_z = this.z % this.sizeLevel4
+
+        let level_5_x = Math.floor(fifth_x / this.sizeLevel5)
+        let level_5_z = Math.floor(fifth_z / this.sizeLevel5)
+
+        let level5_location = this.gridMapLevel2.get(this.gridKey(level_5_x, level_5_z))
+
+        console.log(`level5_location: ${level5_location}`)
+
         //返回最终位置代码
-        return `${level1_location}${level2_location}${level3_location}`
+        return `${level1_location}${level2_location}${level3_location}${level4_location}${level5_location}`
     }
 
     getWorldLocation(locationCode: string) {
-        //AD16
-        //0123
+        //AD16 12
+        //0123 45
         let level1_location_code = locationCode.substring(0, 2)    //截取0，1两个字符
         let level2_location_code = locationCode.substring(2, 3)
         let level3_location_code = locationCode.substring(3, 4)
+        let level4_location_code = locationCode.substring(4, 5)
+        let level5_location_code = locationCode.substring(5, 6)
 
-        console.log(`${level1_location_code}, ${level2_location_code}, ${level3_location_code}`)
+        console.log(`${level1_location_code}, ${level2_location_code}, ${level3_location_code}, ${level4_location_code}, ${level5_location_code}`)
 
-        let location1=this.gridMapLevel1_nummap.get(level1_location_code)
-        let location2=this.gridMapLevel2_nummap.get(level2_location_code)
-        let location3=this.gridMapLevel2_nummap.get(level3_location_code)
+        let location1 = this.gridMapLevel1_nummap.get(level1_location_code)
+        let location2 = this.gridMapLevel2_nummap.get(level2_location_code)
+        let location3 = this.gridMapLevel2_nummap.get(level3_location_code)
+        let location4 = this.gridMapLevel2_nummap.get(level4_location_code)
+        let location5 = this.gridMapLevel2_nummap.get(level5_location_code)
 
         console.log(`计算中： location1:${location1?.first}, ${location1?.second};
             location2:${location2?.first}, ${location2?.second},
-            location3:${location3?.first}, ${location3?.second}
+            location3:${location3?.first}, ${location3?.second},
+            location4:${location4?.first}, ${location4?.second},
+            location5:${location5?.first}, ${location5?.second}
             `)
 
 
-        let locationX=0
-        let locationZ=0
+        let locationX = 0
+        let locationZ = 0
 
-        locationX+=(location1?.first ?? 0)*this.sizeLevel1
-        locationZ+=(location1?.second ?? 0)*this.sizeLevel1
+        locationX += (location1?.first ?? 0) * this.sizeLevel1
+        locationZ += (location1?.second ?? 0) * this.sizeLevel1
 
-        locationX+=(location2?.first ?? 0)*this.sizeLevel2
-        locationZ+=(location2?.second ?? 0)*this.sizeLevel2
+        locationX += (location2?.first ?? 0) * this.sizeLevel2
+        locationZ += (location2?.second ?? 0) * this.sizeLevel2
 
-        locationX+=(location3?.first ?? 0)*this.sizeLevel3
-        locationZ+=(location3?.second ?? 0)*this.sizeLevel3
+        locationX += (location3?.first ?? 0) * this.sizeLevel3
+        locationZ += (location3?.second ?? 0) * this.sizeLevel3
 
-        let res=new myPair<number, number>(locationX, locationZ);
+        locationX += (location4?.first ?? 0) * this.sizeLevel4
+        locationZ += (location4?.second ?? 0) * this.sizeLevel4
+
+        locationX += (location5?.first ?? 0) * this.sizeLevel5
+        locationZ += (location5?.second ?? 0) * this.sizeLevel5
+
+        let res = new myPair<number, number>(locationX, locationZ);
         return res;
     }
 
@@ -179,34 +213,39 @@ export class MapCode {
     private getTileLayerSize(layer: number) {
         if (layer === 0) {
             return this.sizeLevel1
-        }
-
-        if (layer === 1) {
+        }else if (layer === 1) {
             return this.sizeLevel2
+        }else if(layer === 2){
+            return this.sizeLevel3
+        }else if(layer === 3){
+            return this.sizeLevel4
+        }else if(layer === 4){
+            return this.sizeLevel5
+        }else{
+            return this.sizeLevel3
         }
-
-        return this.sizeLevel3
     }
 
     //获取layer对应的瓦片的行数（列数）
     private getTileLayerCount(layer: number) {
         if (layer === 0) {
             return 3
-        }
-
-        if (layer === 1) {
+        }else if (layer === 1) {
             return 9
+        }else if(layer === 2){
+            return 27
+        }else if(layer === 3){
+            return 81
+        }else if(layer === 4){
+            return 243
+        }else{
+            return 27
         }
-
-        return 27
     }
 
     //封装图片读取路径
     private getTileMapPath(layer: number, column: number, row: number) {
-        return new URL(
-            `../../assets/Tile Maps/tiles/${layer}/tile_${column}_${row}.png`,
-            import.meta.url,
-        ).href
+        return `/assets/Tile Maps/tiles/${layer}/tile_${column}_${row}.png`
     }
 
     private getTileMapsByCenter(centerX: number, centerZ: number, layer: number) {
@@ -240,7 +279,7 @@ export class MapCode {
     }
 
     //随着玩家控制的潜艇移动而动态加载瓦片地图的函数
-    getTileMapsPlayerCenter(Zoom: number){
+    getTileMapsPlayerCenter(Zoom: number) {
         let scrollZoom = this.getTileMapLayer(Zoom)
 
         return this.getTileMapsByCenter(this.x, this.z, scrollZoom)
@@ -254,39 +293,45 @@ export class MapCode {
 
     //----------------处理滚动缩放的瓦片地图加载地图-------------------//
     //改变大小
-    private zoom: number=1  //放大倍率
+    private zoom: number = 1  //放大倍率
 
     //改变位置
     //相当于一个二维向量
     //相对原始位置进行偏移
-    private offsetX: number=0   //X轴偏移量
-    private offsetZ: number=0   //Z轴偏移量
+    private offsetX: number = 0   //X轴偏移量
+    private offsetZ: number = 0   //Z轴偏移量
 
-    public mapSize: number=1350.0
+    public mapSize: number = 1350.0
 
-    updateScrollZoomParas(newZoom: number, newOffsetX: number, newOffsetZ:number){
-        this.zoom=newZoom
-        this.offsetX=newOffsetX
-        this.offsetZ=newOffsetZ
+    updateScrollZoomParas(newZoom: number, newOffsetX: number, newOffsetZ: number) {
+        this.zoom = newZoom
+        this.offsetX = newOffsetX
+        this.offsetZ = newOffsetZ
     }
 
     getTileMapLayer(Zoom: number): number {
-        if(Zoom<1){
+        if (Zoom < 1) {
             return 0
-        }else if(Zoom<2){
+        } else if (Zoom < 2) {
             return 1
-        }else{
+        } else if(Zoom < 3){
+            return 2
+        }else if(Zoom < 4){
+            return 3
+        }else if(Zoom < 5){
+            return 4
+        }else {
             return 2
         }
     }
 
-    getTileMapsMouseDrag(){
-        let layer=this.getTileMapLayer(this.zoom)
+    getTileMapsMouseDrag() {
+        let layer = this.getTileMapLayer(this.zoom)
         let newCenterX = this.x - this.offsetX * OFFSETSENSITIVITY
         let newCenterZ = this.z - this.offsetZ * OFFSETSENSITIVITY
 
         return this.getTileMapsByCenter(newCenterX, newCenterZ, layer)
-    
+
     }
     /*
     调用方式
@@ -300,28 +345,21 @@ export class MapCode {
 
 
     //在地图上标记潜艇当前的位置
-    currentPositionOnTheMap(zoom: number){
+    currentPositionOnTheMap(zoom: number) {
         let layer = this.getTileMapLayer(zoom)
 
         //计算出当前坐标在所在格的相对位置
-        let length: number = this.sizeLevel2
-        if(layer === 0){
-            length = this.sizeLevel1
-        }else if(layer === 1){
-            length = this.sizeLevel2
-        }else if(layer === 2){
-            length = this.sizeLevel3
-        }
+        let length: number = this.getTileLayerSize(layer)
 
 
-        let x_offset = this.x%length
-        let z_offset = this.z%length
+        let x_offset = this.x % length
+        let z_offset = this.z % length
 
-        let x_offset_pixel=x_offset/length*TILEMAPPICTURESIZE   //应该在瓦片地图上水平偏移多少
-        let z_offset_pixel=z_offset/length*TILEMAPPICTURESIZE   //应该在瓦片地图上纵向偏移多少
-        let result={
-            xOffset: x_offset,
-            zOffset:z_offset
+        let x_offset_pixel = x_offset / length * TILEMAPPICTURESIZE   //应该在瓦片地图上水平偏移多少
+        let z_offset_pixel = z_offset / length * TILEMAPPICTURESIZE   //应该在瓦片地图上纵向偏移多少
+        let result = {
+            xOffset: x_offset_pixel,
+            zOffset: z_offset_pixel
         }
         return result
     }
@@ -336,4 +374,3 @@ export class MapCode {
 
 // let test2=new MapCode(0,0);
 // console.log(`1000, 550对应的Code是AD16,经过转换: ${test2.getWorldLocation('AD16').first}, ${test2.getWorldLocation('AD16').second}`);
-
