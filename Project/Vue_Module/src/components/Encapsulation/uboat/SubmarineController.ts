@@ -50,6 +50,13 @@ import type { TorpedoLaunchPlan } from '../torpedor/torpedoTypes.ts'
 export const TORPEDO_FORWARD_OFFSET_FROM_THE_BOW = 3.5
 export const TORPEDO_LATERAL_OFFSET_FROM_THE_CENTERLINE=1
 
+/** ALARM buff 持续时间：右上角 ALARM 按钮触发后保持 10 秒。 */
+export const ALARM_BUFF_DURATION_SECONDS = 10
+/** ALARM 下潜速度倍率：仅增强 L 键下潜速度，不影响 K 键上浮速度。 */
+export const ALARM_DIVE_SPEED_MULTIPLIER = 2.15
+/** ALARM 最大俯仰角：buff 期间上浮抬头和下潜低头上限提升到 75 度。 */
+export const ALARM_MAX_PITCH_DEGREES = 75
+
 
 export interface SubmarineOptions {
   /** 唯一标识（用于多潜艇管理、HUD 等） */
@@ -118,6 +125,7 @@ export class SubmarineController implements Updatable {
   // ---- 内部状态 ----
   private movementDelta = new THREE.Vector3()
   private readonly maxPitch = THREE.MathUtils.degToRad(60)
+  private readonly alarmMaxPitch = THREE.MathUtils.degToRad(ALARM_MAX_PITCH_DEGREES)
   private readonly sinkPitch = THREE.MathUtils.degToRad(-60)
   private readonly pitchResponseSensitivity = 17
   private readonly pitchSmoothing = 1.04
@@ -132,6 +140,7 @@ export class SubmarineController implements Updatable {
   //---- 是否被击沉 ----
   public isDestroyed = false
   public isSink = false //是否已经沉底，沉底后碰撞检测失效
+  private isAlarmBuffActive = false
 
   // ---- HUD 回调（由 Vue 组件注入） ----
   onHudUpdate?: (data: {
@@ -302,6 +311,14 @@ export class SubmarineController implements Updatable {
     return yawToCompassDegrees(this.heading)
   }
 
+  activateAlarmBuff(): void {
+    this.isAlarmBuffActive = true
+  }
+
+  deactivateAlarmBuff(): void {
+    this.isAlarmBuffActive = false
+  }
+
   // ==================== 每帧更新（由 GameEngine 调用） ====================
 
   update(delta: number, time: number): void {
@@ -389,8 +406,12 @@ export class SubmarineController implements Updatable {
       (this.input.pressedKeys.has('KeyK') ? 1 : 0)
 
     if (diveInput !== 0) {
+      const verticalSpeed =
+        diveInput > 0 && this.isAlarmBuffActive
+          ? MAX_VERTICAL_SPEED * ALARM_DIVE_SPEED_MULTIPLIER
+          : MAX_VERTICAL_SPEED
       this.targetDepth = THREE.MathUtils.clamp(
-        this.targetDepth + diveInput * MAX_VERTICAL_SPEED * delta,
+        this.targetDepth + diveInput * verticalSpeed * delta,
         0,
         MAX_DEPTH_SCENE,
       )
@@ -411,10 +432,14 @@ export class SubmarineController implements Updatable {
 
     // 平滑垂直运动
     const difference = this.targetDepth - this.currentDepth
+    const maxVerticalSpeed =
+      difference > 0 && this.isAlarmBuffActive
+        ? MAX_VERTICAL_SPEED * ALARM_DIVE_SPEED_MULTIPLIER
+        : MAX_VERTICAL_SPEED
     const desiredVerticalSpeed = THREE.MathUtils.clamp(
       difference * 2,
       -MAX_VERTICAL_SPEED,
-      MAX_VERTICAL_SPEED,
+      maxVerticalSpeed,
     )
     this.verticalSpeed = THREE.MathUtils.damp(this.verticalSpeed, desiredVerticalSpeed, 3, delta)
 
@@ -568,7 +593,8 @@ export class SubmarineController implements Updatable {
       -1,
       1,
     )
-    const targetPitch = -pitchIntent * this.maxPitch
+    const maxPitch = this.isAlarmBuffActive ? this.alarmMaxPitch : this.maxPitch
+    const targetPitch = -pitchIntent * maxPitch
     this.visual.rotation.z = THREE.MathUtils.damp(
       this.visual.rotation.z,
       targetPitch,

@@ -3,30 +3,36 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 
-import { GameEngine } from './engine/GameEngine.ts'
-import { InputController } from './engine/InputController.ts'
-import { CameraController } from './engine/CameraController.ts'
-import { SubmarineController } from './uboat/SubmarineController.ts'
-import { CargoShipController } from './cargoship/CargoShipController.ts'
-import { OceanController } from './ocean/OceanController.ts'
-import { tuneSunMaterials, disposeObject } from './modules/modelUtils.ts'
-import { HitDetectSystem } from './modules/hitdetect.ts'
-import UnderwaterStatusPanel from './panel/UnderwaterStatusPanel.vue'
-import { headingStringToDegrees } from './modules/navigationMath.ts'
-import VoyageMap from '../../common/map/voyagemap.vue'
+import { GameEngine } from '../engine/GameEngine.ts'
+import { InputController } from '../engine/InputController.ts'
+import { CameraController } from '../engine/CameraController.ts'
+import {
+  ALARM_BUFF_DURATION_SECONDS,
+  SubmarineController,
+} from '../uboat/SubmarineController.ts'
+import { CargoShipController } from '../cargoship/CargoShipController.ts'
+import { OceanController } from '../ocean/OceanController.ts'
+import { tuneSunMaterials, disposeObject } from '../modules/modelUtils.ts'
+import { HitDetectSystem } from '../modules/hitdetect.ts'
+import UnderwaterStatusPanel from '../panel/UnderwaterStatusPanel.vue'
+import TopRightPanel from '../panel/TopRightPanel.vue'
+import { headingStringToDegrees } from '../modules/navigationMath.ts'
+import VoyageMap from '../../../common/map/VoyageMap.vue'
+import PlayAudio from '../../../common/audiotool/PlayAudio.ts'
 
-import '../../css/test-3d-programized-ocean.css'
+import '../../../css/test-3d-programized-ocean.css'
 
 import { v4 as uuidv4 } from 'uuid'
-import { ExplosionSplashEffect } from './ExplosionSplashEffect/explosionSplashEffect.ts'
-import { GameEntityRegistry } from './entitymanager/GameEntityRegistry.ts'
-import type { TorpedoLaunchPlan } from './torpedor/torpedoTypes.ts'
+import { ExplosionSplashEffect } from '../ExplosionSplashEffect/explosionSplashEffect.ts'
+import { GameEntityRegistry } from '../entitymanager/GameEntityRegistry.ts'
+import type { TorpedoLaunchPlan } from '../torpedor/torpedoTypes.ts'
 
 const submarineUrl = '/assets/model/type_vii_d_u-boat.glb'
 const cargoshipUrl = '/assets/model/liberty_ship.glb'
 const torpedoUrl = '/assets/model/mkxii_torpedo.glb'
 const sunUrl = '/assets/model/sun.glb'
 const periscopeSightUrl = '/assets/Uboot Periscope sight/UBootPeriscopeAimingSight.png'
+const alarmAudioUrl = ''
 
 //------本地测试的版本(尚未和后端服务器进行交互)-------//
 
@@ -67,6 +73,8 @@ const isAimingViewActive = ref(false)
 const commandedSpeedFraction = ref<number | null>(null)
 const remainingTorpedoes = ref(14)
 const targetDefaultHeight = ref(0)
+const isAlarmActive = ref(false)
+const alarmRemainingSeconds = ref(0)
 
 // -------------------- 计算属性 --------------------
 const loadingLabel = computed(() => `${Math.round(loadingProgress.value)}%`)
@@ -97,6 +105,10 @@ let hintTimer: ReturnType<typeof setTimeout> | undefined
 let noticeTimer: ReturnType<typeof setTimeout> | undefined
 let salvoInProgress = false
 const salvoTimers: ReturnType<typeof setTimeout>[] = []
+let alarmTimeout: ReturnType<typeof setTimeout> | undefined
+let alarmCountdownTimer: ReturnType<typeof setInterval> | undefined
+let alarmEndsAt = 0
+let alarmAudio: PlayAudio | undefined
 
 // -------------------- 面板引用 --------------------
 const statusPanelRef = ref<InstanceType<typeof UnderwaterStatusPanel> | null>(null)
@@ -137,6 +149,43 @@ function handleSpeedCommand(fraction: number) {
 function handleHeadingCommand(headingString: string) {
   const degrees = headingStringToDegrees(headingString)
   submarine?.setHeadingCommand(degrees)
+}
+
+function finishAlarmBuff() {
+  if (alarmTimeout) {
+    clearTimeout(alarmTimeout)
+    alarmTimeout = undefined
+  }
+  if (alarmCountdownTimer) {
+    clearInterval(alarmCountdownTimer)
+    alarmCountdownTimer = undefined
+  }
+  isAlarmActive.value = false
+  alarmRemainingSeconds.value = 0
+  submarine?.deactivateAlarmBuff()
+  alarmAudio?.stop()
+  alarmAudio = undefined
+}
+
+function updateAlarmCountdown() {
+  const remainingMs = Math.max(0, alarmEndsAt - Date.now())
+  alarmRemainingSeconds.value = Math.ceil(remainingMs / 1000)
+  if (remainingMs <= 0) finishAlarmBuff()
+}
+
+function handleAlarm() {
+  if (isAlarmActive.value || !submarine) return
+
+  isAlarmActive.value = true
+  alarmEndsAt = Date.now() + ALARM_BUFF_DURATION_SECONDS * 1000
+  alarmRemainingSeconds.value = ALARM_BUFF_DURATION_SECONDS
+  submarine.activateAlarmBuff()
+
+  alarmAudio = new PlayAudio(alarmAudioUrl, ALARM_BUFF_DURATION_SECONDS)
+  void alarmAudio.play()
+
+  alarmCountdownTimer = setInterval(updateAlarmCountdown, 250)
+  alarmTimeout = setTimeout(finishAlarmBuff, ALARM_BUFF_DURATION_SECONDS * 1000)
 }
 
 function handleSpaceFire() {
@@ -384,6 +433,7 @@ onBeforeUnmount(() => {
   if (noticeTimer) clearTimeout(noticeTimer)
   for (const timer of salvoTimers) clearTimeout(timer)
   salvoTimers.length = 0
+  finishAlarmBuff()
   if (hitDetect && engine) {
     engine.removeUpdatable(hitDetect)
     hitDetect.clear()
@@ -431,6 +481,13 @@ onBeforeUnmount(() => {
       :submarine-world-x="submarineWorldX"
       :submarine-world-z="submarineWorldZ"
       :heading-degrees="headingDegrees"
+    />
+
+    <TopRightPanel
+      v-if="isLoaded"
+      :is-alarm-active="isAlarmActive"
+      :alarm-remaining-seconds="alarmRemainingSeconds"
+      @alarm="handleAlarm"
     />
 
     <!-- 潜望镜/水面瞄准叠加层 -->

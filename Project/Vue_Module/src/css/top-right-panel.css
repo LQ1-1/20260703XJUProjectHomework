@@ -1,0 +1,73 @@
+.top-right-panel {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  z-index: 7;
+  display: flex;
+  width: 180px;
+  flex-direction: column;
+  gap: 10px;
+  font-family: Inter, system-ui, sans-serif;
+  pointer-events: auto;
+}
+
+.top-right-panel__section {
+  width: 100%;
+  border: 1px solid rgba(230, 244, 255, 0.2);
+  border-radius: 8px;
+  background: rgba(2, 14, 23, 0.62);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.25);
+  backdrop-filter: blur(8px);
+}
+
+.top-right-panel__section--alarm {
+  padding: 10px;
+}
+
+.top-right-panel__alarm-button {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid rgba(255, 203, 203, 0.4);
+  border-radius: 6px;
+  background: #b9131c;
+  color: #fff5f5;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+}
+
+.top-right-panel__alarm-button:hover:not(:disabled) {
+  background: #d01b25;
+}
+
+.top-right-panel__alarm-button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.top-right-panel__alarm-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.82;
+}
+
+.top-right-panel__section--stopwatch {
+  height: 136px;
+}
+
+@media (max-width: 600px) {
+  .top-right-panel {
+    top: 12px;
+    right: 12px;
+    width: 148px;
+  }
+
+  .top-right-panel__alarm-button {
+    min-height: 40px;
+    font-size: 14px;
+  }
+
+  .top-right-panel__section--stopwatch {
+    height: 112px;
+  }
+}

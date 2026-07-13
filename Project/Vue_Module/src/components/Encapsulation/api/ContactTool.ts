@@ -29,6 +29,7 @@ export class UBoatInfo extends ShipInfo {
     }
 }
 
+//上传命中记录
 export class HitRecordShip {
     public senderUUID: string
     public targetUUID: string
@@ -41,6 +42,7 @@ export class HitRecordShip {
     }
 }
 
+//击沉吨位数
 export class HitRecordTonnage {
     public senderUUID: string
     public totalTonnages: number
@@ -51,6 +53,7 @@ export class HitRecordTonnage {
     }
 }
 
+//击沉船只数
 export class HitRecordsShips {
     public tf: boolean
     public records: HitRecordShip[]
@@ -61,6 +64,7 @@ export class HitRecordsShips {
     }
 }
 
+//吨位数总榜
 export class HitRecordsTonnages {
     public tf: boolean
     public records: HitRecordTonnage[]
@@ -73,7 +77,7 @@ export class HitRecordsTonnages {
 //通讯信息
 export class Communication {
     public sender: string
-    public senderUUID: string
+    public senderUUID: string   //KommandantID
 
     public receiver: string
     public receiverUUID: string
@@ -89,6 +93,7 @@ export class Communication {
     }
 }
 
+//商船总体信息
 export class ConvoyDetailInfo {
     public tf: boolean      //tf为一就表示是测试数据
     public convoy: CargoshipInfo[]
@@ -99,6 +104,7 @@ export class ConvoyDetailInfo {
     }
 }
 
+//狼群总体信息
 export class wolfpackDetailInfo {
     public tf: boolean
     public wolfpack: UBoatInfo[]
@@ -111,7 +117,51 @@ export class wolfpackDetailInfo {
 }
 
 
+export class UBoatKommandant{
+    public KommandantName?: string   //指挥官姓名（用户输入）
+    public KommandantUUID?: string   //指挥官ID      
+    public UBoatID?: string  //潜艇编号（用户输入）
 
+    constructor(KommandantName?: string, KommandantUUID?: string, UBoatID?: string){
+        this.KommandantName=KommandantName
+        this.KommandantUUID=KommandantUUID
+        this.UBoatID=UBoatID
+    }
+}
+
+export class LoginDTO{
+    public KommandantUUID?: string
+    constructor(KommandantUUID?: string){
+        this.KommandantUUID=KommandantUUID
+    }
+}
+
+
+
+//---------------- 出口函数 --------------------//
+/*
+
+调用方式:
+let result = await login(loginParam)
+
+console.log(result)
+console.log(result.code)
+console.log(result.message)
+console.log(result.data)
+console.log(result.data.KommandantName)
+
+*/
+
+
+//登录接口
+export async function login(param: LoginDTO){
+    return await request.post('/login', param)
+}
+
+//注册接口
+export async function registration(param: UBoatKommandant){
+    return await request.post('/registration', param)
+}
 
 
 
@@ -140,8 +190,8 @@ export async function sendTelegram(param: Communication) {
 
 
 */
-export async function receiveTelegram(param: Communication) {
-    return await request.get('/communication/receive', { params: param })
+export async function receiveTelegram() {
+    return await request.get('/communication/receive')
 }
 
 
@@ -156,8 +206,8 @@ export async function receiveTelegram(param: Communication) {
 3.
 4. tf test flag
 */
-export async function getConvoyInformation(param: ConvoyDetailInfo) {
-    return await request.get('/convoy/info', { params: param })
+export async function getConvoyInformation() {
+    return await request.get('/convoy/info')
 }
 
 
@@ -170,8 +220,8 @@ export async function getConvoyInformation(param: ConvoyDetailInfo) {
 2.Wolf pack detail information array [U-boat A{model UUID, location, heading degree, speed, depth}, U-boat B{}, U-boat C{}, U-boat D{}]
 3. tf
 */
-export async function getWolfPackInfos(param: wolfpackDetailInfo) {
-    return await request.get('/wolfpack/infos', { params: param })
+export async function getWolfPackInfos() {
+    return await request.get('/wolfpack/infos')
 }
 
 
@@ -213,8 +263,8 @@ export async function uploadSinkRecord(param: HitRecordShip) {
 1.
 2.
 */
-export async function getSinkRecordsShips(param: HitRecordsShips) {
-    return await request.get('/sink-record/records/ships', { params: param })
+export async function getSinkRecordsShips() {
+    return await request.get('/sink-record/records/ships')
 }
 
 
@@ -224,6 +274,6 @@ export async function getSinkRecordsShips(param: HitRecordsShips) {
 1.
 2.
 */
-export async function getSinkRecordsTonnages(param: HitRecordsTonnages) {
-    return await request.get('/sink-record/records/ships', { params: param })
+export async function getSinkRecordsTonnages() {
+    return await request.get('/sink-record/records/tonnages')
 }

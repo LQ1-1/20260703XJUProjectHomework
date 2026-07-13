@@ -1,0 +1,110 @@
+.mode-container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background:
+    radial-gradient(circle at 50% 22%, rgba(79, 150, 190, 0.35), transparent 34%),
+    linear-gradient(180deg, #071a26 0%, #03101a 58%, #01070d 100%);
+  font-family: Inter, system-ui, sans-serif;
+}
+
+.mode-card {
+  width: min(520px, 100%);
+  padding: 28px;
+  border: 1px solid rgba(170, 215, 242, 0.2);
+  border-radius: 8px;
+  background: rgba(5, 20, 31, 0.86);
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.38);
+  backdrop-filter: blur(10px);
+}
+
+.mode-header {
+  text-align: center;
+}
+
+.mode-header p {
+  margin: 0 0 8px;
+  color: rgba(155, 204, 232, 0.86);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+}
+
+.mode-header h1 {
+  margin: 0;
+  color: #eef8ff;
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.mode-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 28px;
+}
+
+.mode-option {
+  min-height: 128px;
+  padding: 18px 14px;
+  border: 1px solid rgba(188, 224, 246, 0.18);
+  border-radius: 8px;
+  background: rgba(10, 34, 51, 0.9);
+  color: #eef8ff;
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    transform 160ms ease;
+}
+
+.mode-option:hover {
+  border-color: rgba(125, 198, 239, 0.72);
+  background: rgba(15, 53, 79, 0.96);
+  transform: translateY(-1px);
+}
+
+.mode-option:active {
+  transform: translateY(0);
+}
+
+.mode-option span {
+  display: block;
+  margin-bottom: 12px;
+  color: rgba(155, 204, 232, 0.82);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+}
+
+.mode-option strong {
+  display: block;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.mode-option--online {
+  box-shadow: inset 0 0 0 1px rgba(93, 169, 222, 0.12);
+}
+
+.mode-option--offline {
+  box-shadow: inset 0 0 0 1px rgba(135, 209, 186, 0.12);
+}
+
+@media (max-width: 560px) {
+  .mode-container {
+    padding: 16px;
+  }
+
+  .mode-card {
+    padding: 22px;
+  }
+
+  .mode-actions {
+    grid-template-columns: 1fr;
+  }
+}
