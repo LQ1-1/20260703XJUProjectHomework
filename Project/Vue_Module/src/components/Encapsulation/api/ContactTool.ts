@@ -136,6 +136,128 @@ export class LoginDTO{
     }
 }
 
+export class RoomDTO{
+    public RoomID?: string
+    public PlayerAmount?: number
+    public maxPlayers?: number
+    public status?: 'joinable' | 'full'
+    constructor(RoomID?: string, PlayerAmount?: number, maxPlayers?: number, status?: 'joinable' | 'full'){
+        this.RoomID=RoomID
+        this.PlayerAmount=PlayerAmount
+        this.maxPlayers=maxPlayers
+        this.status=status
+    }
+}
+
+export interface RoomCreateDTO {
+    maxPlayers?: number
+    roomName?: string
+}
+
+export interface RoomJoinDTO {
+    RoomID: string
+}
+
+export interface RoomLeaveDTO {
+    RoomID: string
+}
+
+export interface RoomPlayerDTO {
+    KommandantUUID: string
+    KommandantName: string
+    UBoatID: string
+    online: boolean
+}
+
+export interface TextMessageDTO {
+    RoomID: string
+    receiverUUIDs: string[]
+    content: string
+}
+
+export interface ModelLifecycleDTO {
+    modelID: string
+    lifecycleState: 'active' | 'sinking' | 'sunk'
+    hitByModelID?: string
+    hitByKommandantUUID?: string
+    hitAt?: string
+    sunkAt?: string
+}
+
+export interface OnlineUBoatStateDTO extends ModelLifecycleDTO {
+    KommandantUUID: string
+    KommandantName?: string
+    UBoatID?: string
+    headingDegrees: number
+    speedKmh: number
+    location: { x: number, z: number }
+    depthMeters: number
+    torpedoesRemaining?: number
+    navigationState?: string
+    lastUpdateAt?: string
+}
+
+export interface OnlineCargoShipStateDTO extends ModelLifecycleDTO {
+    headingDegrees: number
+    speedKnots: number
+    location: { x: number, z: number }
+    depthMeters: number
+    tonnage?: number
+    lastUpdateAt?: string
+}
+
+export interface OnlineTorpedoStateDTO {
+    modelID: string
+    ownerModelID: string
+    headingDegrees: number
+    speedKnots: number
+    location: { x: number, z: number }
+    depthMeters: number
+    lastUpdateAt?: string
+}
+
+export interface OnlineTorpedoSyncDTO {
+    RoomID: string
+    torpedo: OnlineTorpedoStateDTO
+}
+
+export interface HitReportDTO {
+    RoomID: string
+    attackerModelID: string
+    targetModelID: string
+    targetType: 'cargoShip' | 'uBoat'
+    torpedoModelID: string
+    hitTime: string
+}
+
+export interface SunkConfirmDTO {
+    RoomID: string
+    modelID: string
+    modelType: 'cargoShip' | 'uBoat'
+    sunkAt: string
+}
+
+export interface WorldSyncDTO {
+    RoomID: string
+    selfUBoat?: OnlineUBoatStateDTO
+}
+
+export interface SettlementDTO {
+    RoomID: string
+    KommandantUUID: string
+    cargoShipsSunk: number
+    totalTonnage: number
+}
+
+export interface GameResultDTO {
+    RoomID: string
+    state: 'playing' | 'victory' | 'defeat'
+    reason?: 'cargo_sunk_threshold' | 'cargo_arrived' | 'torpedoes_depleted' | 'all_uboats_sunk'
+    cargoShipsSunk: number
+    totalCargoShips: number
+    sunkRatio: number
+}
+
 
 
 //---------------- 出口函数 --------------------//
@@ -177,7 +299,12 @@ export async function registration(param: UBoatKommandant){
 
 6.tf      test flag
 */
+/** @deprecated 后端第一版只支持 TextMessageDTO，请使用 sendTextMessage。 */
 export async function sendTelegram(param: Communication) {
+    return await request.post('/communication/send', param)
+}
+
+export async function sendTextMessage(param: TextMessageDTO) {
     return await request.post('/communication/send', param)
 }
 
@@ -190,8 +317,12 @@ export async function sendTelegram(param: Communication) {
 
 
 */
-export async function receiveTelegram() {
-    return await request.get('/communication/receive')
+export async function receiveTelegram(RoomID?: string, after?: string) {
+    return await request.get('/communication/receive', { params: { RoomID, after } })
+}
+
+export async function receiveServerNotice(RoomID?: string, after?: string) {
+    return await request.get('/server/notice', { params: { RoomID, after } })
 }
 
 
@@ -206,6 +337,7 @@ export async function receiveTelegram() {
 3.
 4. tf test flag
 */
+/** @deprecated 后端第一版不实现 /convoy/info，请使用 getWorldSync(RoomID) 中的 cargoShips。 */
 export async function getConvoyInformation() {
     return await request.get('/convoy/info')
 }
@@ -220,6 +352,7 @@ export async function getConvoyInformation() {
 2.Wolf pack detail information array [U-boat A{model UUID, location, heading degree, speed, depth}, U-boat B{}, U-boat C{}, U-boat D{}]
 3. tf
 */
+/** @deprecated 后端第一版不实现 /wolfpack/infos，请使用 getWorldSync(RoomID) 中的 uBoats。 */
 export async function getWolfPackInfos() {
     return await request.get('/wolfpack/infos')
 }
@@ -237,6 +370,7 @@ export async function getWolfPackInfos() {
 2.U-boat information: model UUID, location, heading degree, speed, depth
 3. tf
 */
+/** @deprecated 后端第一版不实现 /wolfpack/upload，请使用 uploadOnlineUBoatState。 */
 export async function uploadUBoatInfo(param: UBoatInfo) {
     return await request.post('/wolfpack/upload', param)
 }
@@ -251,6 +385,7 @@ export async function uploadUBoatInfo(param: UBoatInfo) {
 1.命中目标uuid
 2.captain uuid
 */
+/** @deprecated 后端第一版不实现 /sink-record/upload，请使用 reportModelHit 和 confirmModelSunk。 */
 export async function uploadSinkRecord(param: HitRecordShip) {
     return await request.post('/sink-record/upload', param)
 }
@@ -263,6 +398,7 @@ export async function uploadSinkRecord(param: HitRecordShip) {
 1.
 2.
 */
+/** @deprecated 后端第一版不实现该接口，请使用 getWorldSync(RoomID) 中的 settlement/gameResult。 */
 export async function getSinkRecordsShips() {
     return await request.get('/sink-record/records/ships')
 }
@@ -274,6 +410,52 @@ export async function getSinkRecordsShips() {
 1.
 2.
 */
+/** @deprecated 后端第一版不实现该接口，请使用 getWorldSync(RoomID) 中的 settlement/gameResult。 */
 export async function getSinkRecordsTonnages() {
     return await request.get('/sink-record/records/tonnages')
+}
+
+
+
+//获取房间信息
+export async function getRoomInfos(){
+    return await request.get('/room/info')
+}
+
+//进入房间
+export async function enterRoom(param: RoomJoinDTO){
+    return await request.post('/room/enter', param)
+}
+
+//创建房间
+export async function createRoom(param: RoomCreateDTO){
+    return await request.post('/room/create', param)
+}
+
+export async function getRoomDetail(RoomID: string){
+    return await request.get('/room/detail', { params: { RoomID } })
+}
+
+export async function leaveRoom(param: RoomLeaveDTO){
+    return await request.post('/room/leave', param)
+}
+
+export async function uploadOnlineUBoatState(param: WorldSyncDTO){
+    return await request.post('/sync/uboat', param)
+}
+
+export async function uploadOnlineTorpedoState(param: OnlineTorpedoSyncDTO){
+    return await request.post('/sync/torpedo', param)
+}
+
+export async function getWorldSync(RoomID: string){
+    return await request.get('/sync/world', { params: { RoomID } })
+}
+
+export async function reportModelHit(param: HitReportDTO){
+    return await request.post('/model/hit', param)
+}
+
+export async function confirmModelSunk(param: SunkConfirmDTO){
+    return await request.post('/model/sunk-confirm', param)
 }

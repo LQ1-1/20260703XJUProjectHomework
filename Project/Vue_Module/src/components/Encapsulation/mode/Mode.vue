@@ -7,7 +7,7 @@ const route = useRoute()
 
 function enterOnlineMode() {
   router.push({
-    name: 'UboatGame_Online',
+    name: 'Login',
     query: route.query,
   })
 }

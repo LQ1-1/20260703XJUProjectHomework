@@ -16,7 +16,11 @@ import { tuneSunMaterials, disposeObject } from '../modules/modelUtils.ts'
 import { HitDetectSystem } from '../modules/hitdetect.ts'
 import UnderwaterStatusPanel from '../panel/UnderwaterStatusPanel.vue'
 import TopRightPanel from '../panel/TopRightPanel.vue'
-import { headingStringToDegrees } from '../modules/navigationMath.ts'
+import {
+  MANUAL_HEADING_COMMAND,
+  MANUAL_SPEED_COMMAND,
+  headingStringToDegrees,
+} from '../modules/navigationMath.ts'
 import VoyageMap from '../../../common/map/VoyageMap.vue'
 import PlayAudio from '../../../common/audiotool/PlayAudio.ts'
 
@@ -142,11 +146,20 @@ function showLimitNotice(message: string) {
 }
 
 // -------------------- 面板指令 → 潜艇 --------------------
-function handleSpeedCommand(fraction: number) {
+function handleSpeedCommand(fraction: number | string) {
+  if (fraction === MANUAL_SPEED_COMMAND) {
+    submarine?.clearSpeedCommand()
+    return
+  }
+  if (typeof fraction !== 'number') return
   submarine?.setSpeedCommand(fraction)
 }
 
 function handleHeadingCommand(headingString: string) {
+  if (headingString === MANUAL_HEADING_COMMAND) {
+    submarine?.clearHeadingCommand()
+    return
+  }
   const degrees = headingStringToDegrees(headingString)
   submarine?.setHeadingCommand(degrees)
 }
@@ -291,11 +304,11 @@ onMounted(async () => {
       input, 
       cameraCtrl, {
       id: uuidv4(), //使用uuid作为模型编号
-      // coordinateCode: 'AD16',
-      worldPosition: {
-        x: 900,
-        z: 450
-      },
+      coordinateCode: 'AD9817',
+      // worldPosition: {
+      //   x: 900,
+      //   z: 450
+      // },
       initialHeadingDegrees: 180,
       initialDepthMeters: 0,
       isPlayerControlled: true,
@@ -330,14 +343,14 @@ onMounted(async () => {
     cargoShips.push(
       await CargoShipController.create(engine, {
         id: uuidv4(),
-        // coordinateCode: 'AD43',
+        coordinateCode: 'AD9931',
 
-        worldPosition: {
-        x: 750,
-        z: 910
-        },
+        // worldPosition: {
+        // x: 750,
+        // z: 910
+        // },
 
-        headingDegrees: 160,
+        headingDegrees: 120,
         speedKnots: 7,
         modelUrl: cargoshipUrl,
         entityRegistry
@@ -345,13 +358,14 @@ onMounted(async () => {
 
         await CargoShipController.create(engine, {
         id: uuidv4(),
+        coordinateCode: 'AD9964',
 
-        worldPosition: {
-        x: 750,
-        z: 1010
-        },
+        // worldPosition: {
+        // x: 750,
+        // z: 1010
+        // },
 
-        headingDegrees: 160,
+        headingDegrees: 120,
         speedKnots: 7,
         modelUrl: cargoshipUrl,
         entityRegistry
@@ -359,12 +373,57 @@ onMounted(async () => {
 
       await CargoShipController.create(engine, {
         id: uuidv4(),
-        worldPosition: {
-        x: 950,
-        z: 1150
-        },
+        coordinateCode: 'AD9997',
+        // worldPosition: {
+        // x: 950,
+        // z: 1150
+        // },
 
-        headingDegrees: 160,
+        headingDegrees: 120,
+        speedKnots: 7,
+        modelUrl: cargoshipUrl,
+        entityRegistry
+      }),
+
+
+      await CargoShipController.create(engine, {
+        id: uuidv4(),
+        coordinateCode: 'AD9911',
+        // worldPosition: {
+        // x: 950,
+        // z: 1150
+        // },
+
+        headingDegrees: 120,
+        speedKnots: 7,
+        modelUrl: cargoshipUrl,
+        entityRegistry
+      }),
+
+
+      await CargoShipController.create(engine, {
+        id: uuidv4(),
+        coordinateCode: 'AD9944',
+        // worldPosition: {
+        // x: 950,
+        // z: 1150
+        // },
+
+        headingDegrees: 120,
+        speedKnots: 7,
+        modelUrl: cargoshipUrl,
+        entityRegistry
+      }),
+
+      await CargoShipController.create(engine, {
+        id: uuidv4(),
+        coordinateCode: 'AD9977',
+        // worldPosition: {
+        // x: 950,
+        // z: 1150
+        // },
+
+        headingDegrees: 120,
         speedKnots: 7,
         modelUrl: cargoshipUrl,
         entityRegistry

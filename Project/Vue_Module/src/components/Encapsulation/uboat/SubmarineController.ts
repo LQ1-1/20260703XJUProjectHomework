@@ -466,15 +466,7 @@ export class SubmarineController implements Updatable {
         (this.input.pressedKeys.has('KeyW') ? 1 : 0) -
         (this.input.pressedKeys.has('KeyS') ? 1 : 0)
 
-      if (rawThrottle !== 0) {
-        // 键盘输入优先，清除面板速度指令
-        this.commandedSpeedFraction = null
-        throttle = rawThrottle
-        targetSpeed =
-          throttle > 0
-            ? maxForwardSpeed
-            : -maxForwardSpeed * REVERSE_SPEED_RATIO
-      } else if (this.commandedSpeedFraction !== null) {
+      if (this.commandedSpeedFraction !== null) {
         // 面板速度指令
         const fraction = this.commandedSpeedFraction
         if (fraction >= 0) {
@@ -484,6 +476,13 @@ export class SubmarineController implements Updatable {
           targetSpeed = -maxForwardSpeed * REVERSE_SPEED_RATIO * Math.abs(fraction)
           throttle = -1
         }
+      } else if (rawThrottle !== 0) {
+        // 仅在航速下拉选择“手动航速（W/S）”时生效。
+        throttle = rawThrottle
+        targetSpeed =
+          throttle > 0
+            ? maxForwardSpeed
+            : -maxForwardSpeed * REVERSE_SPEED_RATIO
       }
     }
 
@@ -517,26 +516,7 @@ export class SubmarineController implements Updatable {
         (this.input.pressedKeys.has('KeyA') ? 1 : 0) -
         (this.input.pressedKeys.has('KeyD') ? 1 : 0)
 
-      if (rawTurn !== 0) {
-        // 键盘输入优先，清除面板航向指令
-        this.commandedHeadingDegrees = null
-        if (Math.abs(this.currentSpeed) > 0.0001) {
-          const directionalLimit =
-            this.currentSpeed >= 0 ? maxForwardSpeed : maxForwardSpeed * REVERSE_SPEED_RATIO
-          const steeringStrength = THREE.MathUtils.clamp(
-            Math.abs(this.currentSpeed) / directionalLimit,
-            0,
-            1,
-          )
-          this.heading +=
-            rawTurn *
-            Math.sign(this.currentSpeed) *
-            MAX_TURN_RATE *
-            steeringStrength *
-            delta
-          this.root.rotation.y = this.heading
-        }
-      } else if (this.commandedHeadingDegrees !== null && Math.abs(this.currentSpeed) > 0.0001) {
+      if (this.commandedHeadingDegrees !== null && Math.abs(this.currentSpeed) > 0.0001) {
         // 面板航向指令：直接转向目标（不受前进/后退方向影响）
         const targetRad = THREE.MathUtils.degToRad(90 - this.commandedHeadingDegrees)
         let diff = targetRad - this.heading
@@ -554,9 +534,26 @@ export class SubmarineController implements Updatable {
         if (Math.abs(diff) <= maxTurn) {
           this.heading = targetRad
           this.root.rotation.y = this.heading
-          this.commandedHeadingDegrees = null // 到达目标
         } else {
           this.heading += Math.sign(diff) * maxTurn
+          this.root.rotation.y = this.heading
+        }
+      } else if (rawTurn !== 0) {
+        // 仅在航向下拉选择“手动转向（A/D）”时生效。
+        if (Math.abs(this.currentSpeed) > 0.0001) {
+          const directionalLimit =
+            this.currentSpeed >= 0 ? maxForwardSpeed : maxForwardSpeed * REVERSE_SPEED_RATIO
+          const steeringStrength = THREE.MathUtils.clamp(
+            Math.abs(this.currentSpeed) / directionalLimit,
+            0,
+            1,
+          )
+          this.heading +=
+            rawTurn *
+            Math.sign(this.currentSpeed) *
+            MAX_TURN_RATE *
+            steeringStrength *
+            delta
           this.root.rotation.y = this.heading
         }
       }

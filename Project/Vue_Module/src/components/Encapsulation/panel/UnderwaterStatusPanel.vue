@@ -3,17 +3,22 @@ import { computed, ref, watch } from 'vue'
 import BearingCompassPanel from './BearingCompassPanel.vue'
 import RangeComputer from './RangeComputer.vue'
 import TorpedorDataComputer from './TorpedorDataComputer.vue'
-import { headingStringToDegrees } from '../modules/navigationMath.ts'
+import {
+  MANUAL_HEADING_COMMAND,
+  MANUAL_SPEED_COMMAND,
+  headingStringToDegrees,
+} from '../modules/navigationMath.ts'
 import type { TorpedoLaunchPlan, TorpedoTubeState } from '../torpedor/torpedoTypes'
 import '../../../css/underwater-status-panel.css'
 
 // -------------------- 航速选项 --------------------
 interface SpeedOption {
   label: string
-  value: number
+  value: number | string
 }
 
 const SPEED_OPTIONS: SpeedOption[] = [
+  { label: '手动航速（W/S）', value: MANUAL_SPEED_COMMAND },
   { label: '最大出力（Äusserste Kraft / A.K.）', value: 1 },
   { label: '全速前进（Große Fahrt / G.F.）', value: 0.9 },
   { label: '半速前进（Halbe Fahrt / H.F.）', value: 0.75 },
@@ -33,7 +38,9 @@ function speedFractionToLabel(fraction: number): string {
 
 // -------------------- 航向选项 --------------------
 function buildHeadingOptions(): { label: string; value: string }[] {
-  const opts: { label: string; value: string }[] = []
+  const opts: { label: string; value: string }[] = [
+    { label: '手动转向（A/D）', value: MANUAL_HEADING_COMMAND },
+  ]
   for (let deg = 0; deg <= 360; deg += 5) {
     const label = deg.toString().padStart(3, '0') + '°'
     opts.push({ label, value: label })
@@ -42,15 +49,6 @@ function buildHeadingOptions(): { label: string; value: string }[] {
 }
 
 const HEADING_OPTIONS = buildHeadingOptions()
-
-/** 将实际航向圆整到最近的 5° */
-function roundToNearest5(degrees: number): number {
-  return Math.round(degrees / 5) * 5
-}
-
-function degreesToHeadingString(degrees: number): string {
-  return roundToNearest5(degrees).toString().padStart(3, '0') + '°'
-}
 
 // -------------------- Props --------------------
 const props = defineProps<{
@@ -71,13 +69,13 @@ const props = defineProps<{
 
 // -------------------- Emits --------------------
 const emit = defineEmits<{
-  'speed-command': [fraction: number]
+  'speed-command': [fraction: number | string]
   'heading-command': [headingString: string]
 }>()
 
 // -------------------- 内部状态 --------------------
-const selectedSpeedFraction = ref(0)
-const selectedHeadingString = ref(degreesToHeadingString(props.headingDegrees))
+const selectedSpeedFraction = ref<number | string>(MANUAL_SPEED_COMMAND)
+const selectedHeadingString = ref(MANUAL_HEADING_COMMAND)
 const showTorpedoComputer = ref(false)
 const showRangeComputer = ref(false)
 const torpedoComputerRef = ref<InstanceType<typeof TorpedorDataComputer> | null>(null)
@@ -98,23 +96,34 @@ watch(
 
 // -------------------- 计算属性 --------------------
 const selectedHeadingDegrees = computed(() =>
-  headingStringToDegrees(selectedHeadingString.value),
+  selectedHeadingString.value === MANUAL_HEADING_COMMAND
+    ? props.headingDegrees
+    : headingStringToDegrees(selectedHeadingString.value),
 )
+
+function blurSelect(event: Event): void {
+  if (event.currentTarget instanceof HTMLSelectElement) {
+    event.currentTarget.blur()
+  }
+}
 
 // -------------------- 暴露接口 --------------------
 defineExpose({
   /** 获取当前选择的航速 fraction（-1 到 1） */
   getSelectedSpeedFraction: () => selectedSpeedFraction.value,
   /** 获取当前选择的航速显示文本 */
-  getSelectedSpeedLabel: () => speedFractionToLabel(selectedSpeedFraction.value),
+  getSelectedSpeedLabel: () =>
+    typeof selectedSpeedFraction.value === 'number'
+      ? speedFractionToLabel(selectedSpeedFraction.value)
+      : '手动航速（W/S）',
   /** 获取当前选择航向的数字度数（0–360） */
   getSelectedHeadingDegrees: () => selectedHeadingDegrees.value,
   /** 获取当前选择航向的字符串（如 "045°"） */
   getSelectedHeadingString: () => selectedHeadingString.value,
-  /** 重置：停车 + 同步航向到给定值 */
-  reset(headingDegrees: number) {
-    selectedSpeedFraction.value = 0
-    selectedHeadingString.value = degreesToHeadingString(headingDegrees)
+  /** 重置：停车 + 切回手动转向 */
+  reset(_headingDegrees: number) {
+    selectedSpeedFraction.value = MANUAL_SPEED_COMMAND
+    selectedHeadingString.value = MANUAL_HEADING_COMMAND
   },
   getSelectedLaunchPlans: (): TorpedoLaunchPlan[] =>
     torpedoComputerRef.value?.getSelectedLaunchPlans() ?? [],
@@ -141,7 +150,12 @@ function handleUseRangeDistance(distance: number): void {
       <div>
         <dt>航速</dt>
         <dd>{{ speedKnots.toFixed(1) }} kn</dd>
-        <select v-model="selectedSpeedFraction" class="instrument-select" aria-label="航速指令">
+        <select
+          v-model="selectedSpeedFraction"
+          class="instrument-select"
+          aria-label="航速指令"
+          @change="blurSelect"
+        >
           <option v-for="opt in SPEED_OPTIONS" :key="opt.value" :value="opt.value">
             {{ opt.label }}
           </option>
@@ -150,7 +164,12 @@ function handleUseRangeDistance(distance: number): void {
       <div>
         <dt>航向</dt>
         <dd>{{ headingDegrees.toFixed(0).padStart(3, '0') }}°</dd>
-        <select v-model="selectedHeadingString" class="instrument-select" aria-label="航向指令">
+        <select
+          v-model="selectedHeadingString"
+          class="instrument-select"
+          aria-label="航向指令"
+          @change="blurSelect"
+        >
           <option v-for="opt in HEADING_OPTIONS" :key="opt.value" :value="opt.value">
             {{ opt.label }}
           </option>

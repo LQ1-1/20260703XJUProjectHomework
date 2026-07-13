@@ -48,6 +48,46 @@
   letter-spacing: 0.03em;
 }
 
+.online-room-bar {
+  position: absolute;
+  top: 18px;
+  left: 18px;
+  z-index: 18;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(170, 215, 242, 0.22);
+  border-radius: 8px;
+  background: rgba(5, 20, 31, 0.84);
+  color: #eef8ff;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.32);
+  backdrop-filter: blur(10px);
+  font-family: Inter, system-ui, sans-serif;
+}
+
+.online-room-bar div {
+  min-width: 0;
+}
+
+.online-room-bar span {
+  display: block;
+  margin-bottom: 3px;
+  color: rgba(155, 204, 232, 0.86);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.online-room-bar strong {
+  display: block;
+  max-width: 220px;
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .underwater-screen {
   position: absolute;
   inset: 0;
@@ -142,6 +182,68 @@
   pointer-events: none;
 }
 
+.settlement-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(1, 7, 12, 0.72);
+  backdrop-filter: blur(4px);
+}
+
+.settlement-panel {
+  width: min(420px, 100%);
+  padding: 26px;
+  border: 1px solid rgba(170, 215, 242, 0.24);
+  border-radius: 8px;
+  background: rgba(5, 20, 31, 0.94);
+  color: #eef8ff;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+  font-family: Inter, system-ui, sans-serif;
+}
+
+.settlement-panel p {
+  margin: 0 0 8px;
+  color: rgba(255, 218, 142, 0.92);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.settlement-panel h2 {
+  margin: 0 0 20px;
+  font-size: 24px;
+  letter-spacing: 0;
+}
+
+.settlement-panel dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0 0 22px;
+}
+
+.settlement-panel dl div {
+  padding: 14px;
+  border: 1px solid rgba(188, 224, 246, 0.14);
+  border-radius: 8px;
+  background: rgba(10, 34, 51, 0.72);
+}
+
+.settlement-panel dt {
+  margin-bottom: 8px;
+  color: rgba(155, 204, 232, 0.86);
+  font-size: 12px;
+}
+
+.settlement-panel dd {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 800;
+}
+
 .hint-enter-active,
 .hint-leave-active,
 .notice-enter-active,
@@ -180,6 +282,11 @@
 }
 
 @media (max-width: 600px) {
+  .online-room-bar {
+    right: 12px;
+    left: 12px;
+  }
+
   .control-hint {
     width: max-content;
     max-width: calc(100vw - 24px);

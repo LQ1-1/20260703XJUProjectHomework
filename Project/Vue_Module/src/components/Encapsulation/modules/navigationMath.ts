@@ -1,5 +1,7 @@
 import * as THREE from 'three'
 
+export const MANUAL_HEADING_COMMAND = '__manual_heading__'
+export const MANUAL_SPEED_COMMAND = '__manual_speed__'
 
 export function normalizeDegrees(degrees: number) {
 

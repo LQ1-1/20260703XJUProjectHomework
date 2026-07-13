@@ -3,12 +3,8 @@ import { computed, reactive, ref } from 'vue'
 import {useRouter} from 'vue-router';
 import type { FormInstance, FormRules } from 'element-plus'
 import {
-    User,
     UserFilled,
-    Lock,
     Key,
-    Phone,
-    MessageBox,
 } from '@element-plus/icons-vue'
 import { UBoatKommandant, LoginDTO, login, registration } from '../api/ContactTool'
 import '../../../css/login.css'
@@ -27,9 +23,8 @@ const isLoading = ref(false)
 
 const isRegister = computed(() => registerType.value !== 'login')
 
-const inputedUUID = ref('')
 const showNewUUID = ref(false)
-const newUUID = ref(0)
+const newUUID = ref('')
 
 const titleText = computed(() => {
     if (registerType.value === 'registration') {
@@ -59,7 +54,7 @@ function resetForm() {
     KommandantRegistrationForm.KommandantUUID = ''
     KommandantRegistrationForm.KommandantName = ''
     KommandantRegistrationForm.UBoatID = ''
-    newUUID.value = 0
+    newUUID.value = ''
     showNewUUID.value = false
 }
 
@@ -88,7 +83,6 @@ async function handleSubmit() {
 
     try {
         if (isRegister.value) {
-            showNewUUID.value = true
 
             console.log('注册数据：', {
                 KommandantName: KommandantRegistrationForm.KommandantName,
@@ -101,12 +95,13 @@ async function handleSubmit() {
                 KommandantRegistrationForm.UBoatID);
 
             //发起注册请求
-            let result = await registration(newKommandantRecord)    //sf: success flag
-            if (result.data.sf) {
-                let data = result.data
+            const result = await registration(newKommandantRecord)    //sf: success flag
+            const data = result.data ?? result
+            if (data.sf) {
+                showNewUUID.value = true
                 newUUID.value = data.KommandantUUID
             }else{
-                alert(result.data.message)
+                alert(data.message)
             }
 
         } else {
@@ -115,16 +110,22 @@ async function handleSubmit() {
             })
 
             let loginBody: LoginDTO = new LoginDTO(
-                inputedUUID.value
+                KommandantRegistrationForm.KommandantUUID
             )
 
             //发起登录请求
             let result = await login(loginBody)
-            if(result.data.sf){
-                //跳转进入模式选择界面
-                router
+            const data = result.data ?? result
+            if(data.sf){
+                if (data.token) localStorage.setItem('token', data.token)
+                if (data.KommandantUUID ?? KommandantRegistrationForm.KommandantUUID) {
+                    localStorage.setItem('KommandantUUID', data.KommandantUUID ?? KommandantRegistrationForm.KommandantUUID)
+                }
+                if (data.KommandantName) localStorage.setItem('KommandantName', data.KommandantName)
+                if (data.UBoatID) localStorage.setItem('UBoatID', data.UBoatID)
+                await router.push({ name: 'Room' })
             }else{
-                alert(result.data.message)
+                alert(data.message)
             }
 
         }
@@ -153,7 +154,7 @@ async function handleSubmit() {
                 <!-- 只在登录时显示 -->
                 <template v-if="!isRegister">
                     <el-form-item label="指挥官编号" prop="KommandantUUID">
-                        <el-input v-model="inputedUUID" placeholder="请输入您的指挥官ID" :prefix-icon="Key" />
+                        <el-input v-model="KommandantRegistrationForm.KommandantUUID" placeholder="请输入您的指挥官ID" :prefix-icon="Key" />
                     </el-form-item>
                 </template>
 

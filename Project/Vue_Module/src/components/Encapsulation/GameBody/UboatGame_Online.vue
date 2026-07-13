@@ -1,33 +1,59 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 
 import { GameEngine } from '../engine/GameEngine.ts'
 import { InputController } from '../engine/InputController.ts'
 import { CameraController } from '../engine/CameraController.ts'
-import { SubmarineController } from '../uboat/SubmarineController.ts'
+import {
+  ALARM_BUFF_DURATION_SECONDS,
+  SubmarineController,
+} from '../uboat/SubmarineController.ts'
 import { CargoShipController } from '../cargoship/CargoShipController.ts'
 import { OceanController } from '../ocean/OceanController.ts'
 import { tuneSunMaterials, disposeObject } from '../modules/modelUtils.ts'
 import { HitDetectSystem } from '../modules/hitdetect.ts'
 import UnderwaterStatusPanel from '../panel/UnderwaterStatusPanel.vue'
-import { headingStringToDegrees } from '../modules/navigationMath.ts'
+import TopRightPanel from '../panel/TopRightPanel.vue'
+import {
+  MANUAL_HEADING_COMMAND,
+  MANUAL_SPEED_COMMAND,
+  headingStringToDegrees,
+  yawToCompassDegrees,
+} from '../modules/navigationMath.ts'
+import VoyageMap from '../../../common/map/VoyageMap.vue'
+import PlayAudio from '../../../common/audiotool/PlayAudio.ts'
+import CommunicationPanel from '../communication/Communication.vue'
+import type { OnlineRoomPlayer } from '../communication/communication.ts'
+import {
+  confirmModelSunk,
+  getRoomDetail,
+  getWorldSync,
+  leaveRoom,
+  uploadOnlineUBoatState,
+  uploadOnlineTorpedoState,
+  type OnlineCargoShipStateDTO,
+  type OnlineUBoatStateDTO,
+  type GameResultDTO,
+  type SettlementDTO,
+} from '../api/ContactTool.ts'
 
 import '../../../css/test-3d-programized-ocean.css'
 
 import { v4 as uuidv4 } from 'uuid'
 import { ExplosionSplashEffect } from '../ExplosionSplashEffect/explosionSplashEffect.ts'
 import { GameEntityRegistry } from '../entitymanager/GameEntityRegistry.ts'
+import type { TorpedorController } from '../torpedor/TorpedorController.ts'
 import type { TorpedoLaunchPlan } from '../torpedor/torpedoTypes.ts'
-
-import { CARGOSHIP_HIGHT_SCENE } from '../constant/sceneUnits.ts'
 
 const submarineUrl = '/assets/model/type_vii_d_u-boat.glb'
 const cargoshipUrl = '/assets/model/liberty_ship.glb'
 const torpedoUrl = '/assets/model/mkxii_torpedo.glb'
 const sunUrl = '/assets/model/sun.glb'
 const periscopeSightUrl = '/assets/Uboot Periscope sight/UBootPeriscopeAimingSight.png'
+const alarmAudioUrl = ''
 
 //------本地测试的版本(尚未和后端服务器进行交互)-------//
 
@@ -48,8 +74,15 @@ const WAVE_SETTINGS = {
 const SURFACE_DEPTH_EPSILON_SCENE = 0.02
 const SCENE_TO_METERS = 77 / 22 // MODEL_LENGTH_METERS / MODEL_LENGTH_SCENE
 const UNDERWATER_UI_DEPTH_METERS = 11 //控制UnderWaterStatusPanel显示的深度指标, 潜深超过这个值后显示UnderWaterStatusPanel界面
+const FALLBACK_U_BOAT_SPAWN = {
+  location: { x: 900, z: 450 },
+  headingDegrees: 180,
+  depthMeters: 0,
+}
 
 // -------------------- Vue 响应式状态 --------------------
+const route = useRoute()
+const router = useRouter()
 const viewer = ref<HTMLDivElement | null>(null)
 const loadingProgress = ref(0)
 const loadingError = ref('')
@@ -68,6 +101,18 @@ const isAimingViewActive = ref(false)
 const commandedSpeedFraction = ref<number | null>(null)
 const remainingTorpedoes = ref(14)
 const targetDefaultHeight = ref(0)
+const isAlarmActive = ref(false)
+const alarmRemainingSeconds = ref(0)
+const roomId = ref(String(route.query.RoomID ?? localStorage.getItem('RoomID') ?? ''))
+const selfUUID = ref(localStorage.getItem('KommandantUUID') ?? '')
+const selfName = ref(localStorage.getItem('KommandantName') ?? 'Kommandant')
+const selfUBoatID = ref(localStorage.getItem('UBoatID') ?? '')
+const onlinePlayers = ref<OnlineRoomPlayer[]>([])
+const worldRevision = ref('')
+const settlement = ref<SettlementDTO | null>(null)
+const gameResult = ref<GameResultDTO | null>(null)
+const isLeavingRoom = ref(false)
+const ownUBoatModelID = ref('')
 
 // -------------------- 计算属性 --------------------
 const loadingLabel = computed(() => `${Math.round(loadingProgress.value)}%`)
@@ -98,15 +143,495 @@ let hintTimer: ReturnType<typeof setTimeout> | undefined
 let noticeTimer: ReturnType<typeof setTimeout> | undefined
 let salvoInProgress = false
 const salvoTimers: ReturnType<typeof setTimeout>[] = []
+let alarmTimeout: ReturnType<typeof setTimeout> | undefined
+let alarmCountdownTimer: ReturnType<typeof setInterval> | undefined
+let alarmEndsAt = 0
+let alarmAudio: PlayAudio | undefined
+let uboatUploadTimer: ReturnType<typeof setInterval> | undefined
+let worldSyncTimer: ReturnType<typeof setInterval> | undefined
+let roomDetailTimer: ReturnType<typeof setInterval> | undefined
+const sunkConfirmingModels = new Set<string>()
+const activeSyncedTorpedoes = new Map<string, TorpedorController>()
+const cargoShipCreateTasks = new Map<string, Promise<CargoShipController | undefined>>()
 
 // -------------------- 面板引用 --------------------
 const statusPanelRef = ref<InstanceType<typeof UnderwaterStatusPanel> | null>(null)
+const communicationRef = ref<InstanceType<typeof CommunicationPanel> | null>(null)
 
 // -------------------- 加载进度 --------------------
 const fileProgress = new Map<string, { loaded: number; total: number }>()
 
 // -------------------- 模型管理器 -------------------//
 let entityRegistry: GameEntityRegistry | undefined
+
+function normalizeArrayPayload<T>(payload: any, keys: string[]): T[] {
+  for (const key of keys) {
+    const value = payload?.[key] ?? payload?.data?.[key]
+    if (Array.isArray(value)) return value
+  }
+  if (Array.isArray(payload?.data)) return payload.data
+  if (Array.isArray(payload)) return payload
+  return []
+}
+
+function normalizeRoomPlayers(payload: any): OnlineRoomPlayer[] {
+  const players = payload?.room?.players ?? payload?.data?.room?.players ?? payload?.players ?? payload?.data?.players
+  if (Array.isArray(players)) return players
+  return []
+}
+
+function normalizeUBoatStates(payload: any): OnlineUBoatStateDTO[] {
+  const states = normalizeArrayPayload<OnlineUBoatStateDTO>(payload, ['uBoats', 'wolfpack'])
+  const selfUBoat = payload?.selfUBoat ?? payload?.data?.selfUBoat
+  if (selfUBoat) {
+    states.unshift(selfUBoat)
+  }
+  return states
+}
+
+function isSelfUBoatState(state: Partial<OnlineUBoatStateDTO>): boolean {
+  const kommandantUUID = String(state.KommandantUUID ?? '')
+  const uBoatID = String(state.UBoatID ?? '')
+
+  if (selfUUID.value && kommandantUUID && kommandantUUID === selfUUID.value) return true
+  if (selfUBoatID.value && uBoatID && uBoatID === selfUBoatID.value) return true
+  return false
+}
+
+function findSelfUBoatState(payload: any): OnlineUBoatStateDTO | undefined {
+  const selfUBoat = payload?.selfUBoat ?? payload?.data?.selfUBoat
+  if (selfUBoat && (!selfUBoat.KommandantUUID || isSelfUBoatState(selfUBoat))) {
+    return selfUBoat
+  }
+  return normalizeUBoatStates(payload).find(isSelfUBoatState)
+}
+
+function getUBoatStateLocation(state: Partial<OnlineUBoatStateDTO>): { x: number; z: number } | undefined {
+  const x = Number(state.location?.x ?? (state as any).x)
+  const z = Number(state.location?.z ?? (state as any).z)
+  if (!Number.isFinite(x) || !Number.isFinite(z)) return undefined
+  return { x, z }
+}
+
+function getUBoatStateHeading(state: Partial<OnlineUBoatStateDTO>): number {
+  const heading = Number(state.headingDegrees)
+  return Number.isFinite(heading) ? heading : FALLBACK_U_BOAT_SPAWN.headingDegrees
+}
+
+function getUBoatStateDepth(state: Partial<OnlineUBoatStateDTO>): number {
+  const depth = Number(state.depthMeters ?? (state as any).depth)
+  return Number.isFinite(depth) ? depth : FALLBACK_U_BOAT_SPAWN.depthMeters
+}
+
+async function fetchWorldSyncPayload(): Promise<any | undefined> {
+  if (!roomId.value) return undefined
+  try {
+    return await getWorldSync(roomId.value)
+  } catch (error) {
+    console.warn('初始世界状态获取失败。', error)
+    return undefined
+  }
+}
+
+function getInitialUBoatSpawn(payload: any): {
+  id: string
+  worldPosition: { x: number; z: number }
+  initialHeadingDegrees: number
+  initialDepthMeters: number
+  torpedoesRemaining?: number
+} {
+  const state = findSelfUBoatState(payload)
+  const location = state ? getUBoatStateLocation(state) : undefined
+  const torpedoesRemaining = Number(state?.torpedoesRemaining)
+
+  return {
+    id: String(state?.modelID ?? '') || uuidv4(),
+    worldPosition: location ?? FALLBACK_U_BOAT_SPAWN.location,
+    initialHeadingDegrees: state ? getUBoatStateHeading(state) : FALLBACK_U_BOAT_SPAWN.headingDegrees,
+    initialDepthMeters: state ? getUBoatStateDepth(state) : FALLBACK_U_BOAT_SPAWN.depthMeters,
+    torpedoesRemaining: Number.isFinite(torpedoesRemaining) ? Math.max(0, torpedoesRemaining) : undefined,
+  }
+}
+
+async function pollRoomDetail() {
+  if (!roomId.value) return
+  try {
+    const result = await getRoomDetail(roomId.value)
+    const players = normalizeRoomPlayers(result)
+    if (players.length > 0) {
+      onlinePlayers.value = players
+      return
+    }
+  } catch (error) {
+    console.warn('房间成员轮询失败。', error)
+  }
+
+  if (onlinePlayers.value.length === 0) {
+    onlinePlayers.value = [
+      {
+        KommandantUUID: selfUUID.value,
+        KommandantName: selfName.value,
+        UBoatID: selfUBoatID.value,
+        online: true,
+      },
+      {
+        KommandantUUID: 'DEMO-WOLFPACK-02',
+        KommandantName: 'Otto',
+        UBoatID: 'U-96',
+        online: true,
+      },
+      {
+        KommandantUUID: 'DEMO-WOLFPACK-03',
+        KommandantName: 'Kretschmer',
+        UBoatID: 'U-99',
+        online: true,
+      },
+    ]
+  }
+}
+
+async function uploadSelfState() {
+  if (!roomId.value || !submarine || settlement.value) return
+
+  try {
+    const result: any = await uploadOnlineUBoatState({
+      RoomID: roomId.value,
+      selfUBoat: {
+        modelID: submarine.id,
+        lifecycleState: submarine.isDestroyed ? 'sinking' : 'active',
+        KommandantUUID: selfUUID.value,
+        KommandantName: selfName.value,
+        UBoatID: selfUBoatID.value,
+        headingDegrees: headingDegrees.value,
+        speedKmh: speedKmh.value,
+        location: {
+          x: submarine.root.position.x,
+          z: submarine.root.position.z,
+        },
+        depthMeters: depthMeters.value,
+        torpedoesRemaining: remainingTorpedoes.value,
+        navigationState: navigationState.value,
+        lastUpdateAt: new Date().toISOString(),
+      },
+    })
+    syncTorpedoesRemaining(result)
+  } catch (error) {
+    console.warn('本艇状态上传失败。', error)
+  }
+}
+
+function syncTorpedoesRemaining(payload: any): void {
+  const value =
+    payload?.torpedoesRemaining ??
+    payload?.data?.torpedoesRemaining ??
+    payload?.selfUBoat?.torpedoesRemaining ??
+    payload?.data?.selfUBoat?.torpedoesRemaining
+  if (!Number.isFinite(Number(value))) return
+
+  const nextRemaining = Math.max(0, Number(value))
+  remainingTorpedoes.value = nextRemaining
+  submarine?.setTorpedorCount(nextRemaining)
+}
+
+function isTorpedoInsufficientResponse(payload: any): boolean {
+  const message = String(payload?.message ?? payload?.data?.message ?? '').toLowerCase()
+  const reason = String(payload?.reason ?? payload?.data?.reason ?? '').toLowerCase()
+  const code = String(payload?.code ?? payload?.data?.code ?? '').toLowerCase()
+  const text = `${message} ${reason} ${code}`
+  return text.includes('torpedo') || text.includes('鱼雷不足') || text.includes('no torpedo')
+}
+
+async function uploadTorpedoState(torpedo: TorpedorController, removeIfRejected = false): Promise<boolean> {
+  if (!roomId.value || !submarine || settlement.value || torpedo.isExpired) {
+    activeSyncedTorpedoes.delete(torpedo.id)
+    return false
+  }
+
+  try {
+    const result: any = await uploadOnlineTorpedoState({
+      RoomID: roomId.value,
+      torpedo: {
+        modelID: torpedo.id,
+        ownerModelID: torpedo.ownerId ?? submarine.id,
+        headingDegrees: yawToCompassDegrees(torpedo.heading),
+        speedKnots: (torpedo.currentSpeed * SCENE_TO_METERS * 3.6) / 1.852,
+        location: {
+          x: torpedo.root.position.x,
+          z: torpedo.root.position.z,
+        },
+        depthMeters: torpedo.depth * SCENE_TO_METERS,
+        lastUpdateAt: new Date().toISOString(),
+      },
+    })
+    syncTorpedoesRemaining(result)
+
+    if (removeIfRejected && isTorpedoInsufficientResponse(result)) {
+      activeSyncedTorpedoes.delete(torpedo.id)
+      torpedo.dispose()
+      showLimitNotice(String(result?.message ?? result?.data?.message ?? '鱼雷不足'))
+      return false
+    }
+    return true
+  } catch (error: any) {
+    console.warn('鱼雷状态上传失败。', error)
+    return true
+  }
+}
+
+function uploadActiveTorpedoes(): void {
+  for (const torpedo of activeSyncedTorpedoes.values()) {
+    void uploadTorpedoState(torpedo)
+  }
+}
+
+function getCargoStateModelID(cargoState: Partial<OnlineCargoShipStateDTO>): string {
+  return String(cargoState.modelID ?? '')
+}
+
+function getCargoStateHeading(cargoState: Partial<OnlineCargoShipStateDTO>): number {
+  const heading = Number(cargoState.headingDegrees)
+  return Number.isFinite(heading) ? heading : 0
+}
+
+function getCargoStateSpeedKnots(cargoState: Partial<OnlineCargoShipStateDTO>): number {
+  const speed = Number((cargoState as any).speedKnots ?? (cargoState as any).speed ?? 0)
+  return Number.isFinite(speed) ? speed : 0
+}
+
+function getCargoStateLocation(cargoState: Partial<OnlineCargoShipStateDTO>): { x: number; z: number } {
+  const x = Number(cargoState.location?.x ?? (cargoState as any).x)
+  const z = Number(cargoState.location?.z ?? (cargoState as any).z)
+  return {
+    x: Number.isFinite(x) ? x : 0,
+    z: Number.isFinite(z) ? z : 0,
+  }
+}
+
+async function ensureCargoShip(cargoState: OnlineCargoShipStateDTO): Promise<CargoShipController | undefined> {
+  if (!engine || !entityRegistry) return undefined
+
+  const modelID = getCargoStateModelID(cargoState)
+  if (!modelID) return undefined
+
+  const existing = cargoShips.find((item) => item.id === modelID)
+  if (existing) return existing
+
+  const creating = cargoShipCreateTasks.get(modelID)
+  if (creating) return creating
+
+  const task = CargoShipController.create(engine, {
+    id: modelID,
+    worldPosition: getCargoStateLocation(cargoState),
+    headingDegrees: getCargoStateHeading(cargoState),
+    speedKnots: getCargoStateSpeedKnots(cargoState),
+    modelUrl: cargoshipUrl,
+    entityRegistry,
+  })
+    .then((ship) => {
+      cargoShips.push(ship)
+      engine?.addUpdatable(ship)
+      hitDetect?.registerCargoShip(ship)
+      if (targetDefaultHeight.value <= 0) {
+        targetDefaultHeight.value = ship.modelHeight
+      }
+      return ship
+    })
+    .catch((error) => {
+      console.warn('后端商船模型创建失败。', error)
+      return undefined
+    })
+    .finally(() => {
+      cargoShipCreateTasks.delete(modelID)
+    })
+
+  cargoShipCreateTasks.set(modelID, task)
+  return task
+}
+
+async function applyCargoLifecycle(cargoStates: OnlineCargoShipStateDTO[]) {
+  for (const [index, cargoState] of cargoStates.entries()) {
+    const normalizedCargoState = {
+      ...cargoState,
+      modelID: getCargoStateModelID(cargoState) || `convoy-${index + 1}`,
+      lifecycleState: cargoState.lifecycleState ?? 'active',
+      location: getCargoStateLocation(cargoState),
+      headingDegrees: getCargoStateHeading(cargoState),
+      speedKnots: getCargoStateSpeedKnots(cargoState),
+    }
+    const ship = await ensureCargoShip(normalizedCargoState)
+    if (!ship) continue
+    const lifecycleState = normalizedCargoState.lifecycleState
+
+    if ((lifecycleState === 'sinking' || lifecycleState === 'sunk') && !ship.isDestroyed) {
+      ship.destroy()
+    }
+
+    if (lifecycleState === 'active' && !ship.isDestroyed) {
+      const location = getCargoStateLocation(normalizedCargoState)
+      ship.root.position.x = THREE.MathUtils.lerp(ship.root.position.x, location.x, 0.18)
+      ship.root.position.z = THREE.MathUtils.lerp(ship.root.position.z, location.z, 0.18)
+      ship.heading = THREE.MathUtils.degToRad(90 - getCargoStateHeading(normalizedCargoState))
+      ship.currentSpeed = (getCargoStateSpeedKnots(normalizedCargoState) * 1852 * (1 / SCENE_TO_METERS)) / 3600
+    }
+  }
+}
+
+async function confirmSunkModels() {
+  if (!roomId.value) return
+
+  const candidates: Array<{ id: string; type: 'cargoShip' | 'uBoat' }> = cargoShips
+    .filter((ship) => ship.isSink)
+    .map((ship) => ({ id: ship.id, type: 'cargoShip' as const }))
+
+  if (submarine?.isSink) {
+    candidates.push({ id: submarine.id, type: 'uBoat' as const })
+  }
+
+  for (const candidate of candidates) {
+    if (sunkConfirmingModels.has(candidate.id)) continue
+    sunkConfirmingModels.add(candidate.id)
+    try {
+      await confirmModelSunk({
+        RoomID: roomId.value,
+        modelID: candidate.id,
+        modelType: candidate.type,
+        sunkAt: new Date().toISOString(),
+      })
+    } catch (error) {
+      sunkConfirmingModels.delete(candidate.id)
+      console.warn('沉底确认上报失败。', error)
+    }
+  }
+}
+
+function applyWorldSettlement(payload: any) {
+  const nextSettlement = payload?.settlement ?? payload?.data?.settlement
+  if (!nextSettlement) return
+  settlement.value = {
+    RoomID: nextSettlement.RoomID ?? roomId.value,
+    KommandantUUID: nextSettlement.KommandantUUID ?? selfUUID.value,
+    cargoShipsSunk: Number(nextSettlement.cargoShipsSunk ?? 0),
+    totalTonnage: Number(nextSettlement.totalTonnage ?? 0),
+  }
+}
+
+function applyWorldGameResult(payload: any) {
+  const nextGameResult = payload?.gameResult ?? payload?.data?.gameResult
+  if (!nextGameResult) return
+
+  gameResult.value = {
+    RoomID: String(nextGameResult.RoomID ?? roomId.value),
+    state: nextGameResult.state ?? 'playing',
+    reason: nextGameResult.reason,
+    cargoShipsSunk: Number(nextGameResult.cargoShipsSunk ?? 0),
+    totalCargoShips: Number(nextGameResult.totalCargoShips ?? 0),
+    sunkRatio: Number(nextGameResult.sunkRatio ?? 0),
+  }
+}
+
+async function pollWorldSync(): Promise<boolean> {
+  if (!roomId.value) return false
+  try {
+    const result: any = await getWorldSync(roomId.value)
+    return await applyWorldSyncPayload(result)
+  } catch (error) {
+    console.warn('世界状态轮询失败。', error)
+    return false
+  }
+}
+
+async function createFallbackCargoShips() {
+  if (!engine || !entityRegistry || cargoShips.length > 0) return
+
+  const fallbackCargoStates: OnlineCargoShipStateDTO[] = [
+    {
+      modelID: uuidv4(),
+      lifecycleState: 'active',
+      location: { x: 750, z: 910 },
+      headingDegrees: 160,
+      speedKnots: 7,
+      depthMeters: 0,
+    },
+    {
+      modelID: uuidv4(),
+      lifecycleState: 'active',
+      location: { x: 750, z: 1010 },
+      headingDegrees: 160,
+      speedKnots: 7,
+      depthMeters: 0,
+    },
+    {
+      modelID: uuidv4(),
+      lifecycleState: 'active',
+      location: { x: 950, z: 1150 },
+      headingDegrees: 160,
+      speedKnots: 7,
+      depthMeters: 0,
+    },
+  ]
+
+  await applyCargoLifecycle(fallbackCargoStates)
+}
+
+async function applyWorldSyncPayload(payload: any): Promise<boolean> {
+  const cargoStates = normalizeArrayPayload<OnlineCargoShipStateDTO>(payload, ['cargoShips', 'convoy'])
+  await applyCargoLifecycle(cargoStates)
+  applyWorldSettlement(payload)
+  applyWorldGameResult(payload)
+  syncTorpedoesRemaining(payload)
+  worldRevision.value = String(payload?.revision ?? payload?.data?.revision ?? worldRevision.value)
+  await confirmSunkModels()
+  return cargoStates.length > 0
+}
+
+function startOnlinePolling() {
+  stopOnlinePolling()
+  void pollRoomDetail()
+  void uploadSelfState()
+  uploadActiveTorpedoes()
+  void pollWorldSync()
+  uboatUploadTimer = setInterval(() => {
+    void uploadSelfState()
+    uploadActiveTorpedoes()
+  }, 300)
+  worldSyncTimer = setInterval(pollWorldSync, 500)
+  roomDetailTimer = setInterval(pollRoomDetail, 5000)
+}
+
+function stopOnlinePolling() {
+  if (uboatUploadTimer) clearInterval(uboatUploadTimer)
+  if (worldSyncTimer) clearInterval(worldSyncTimer)
+  if (roomDetailTimer) clearInterval(roomDetailTimer)
+  uboatUploadTimer = undefined
+  worldSyncTimer = undefined
+  roomDetailTimer = undefined
+  activeSyncedTorpedoes.clear()
+  cargoShipCreateTasks.clear()
+  communicationRef.value?.stopPolling()
+}
+
+async function leaveCurrentRoom() {
+  if (isLeavingRoom.value) return
+  isLeavingRoom.value = true
+  stopOnlinePolling()
+  try {
+    if (roomId.value) {
+      await leaveRoom({ RoomID: roomId.value })
+    }
+  } catch (error) {
+    console.warn('退出房间接口失败，本地继续清理。', error)
+  } finally {
+    localStorage.removeItem('RoomID')
+    localStorage.removeItem('RoomMaxPlayers')
+    await router.push({ name: 'Room' })
+  }
+}
+
+function sendLeaveBeacon() {
+  if (!roomId.value) return
+  const body = new Blob([JSON.stringify({ RoomID: roomId.value })], { type: 'application/json' })
+  navigator.sendBeacon?.('/api/room/leave', body)
+}
 
 
 function updateLoadingProgress(url: string, event: ProgressEvent<EventTarget>) {
@@ -131,13 +656,59 @@ function showLimitNotice(message: string) {
 }
 
 // -------------------- 面板指令 → 潜艇 --------------------
-function handleSpeedCommand(fraction: number) {
+function handleSpeedCommand(fraction: number | string) {
+  if (fraction === MANUAL_SPEED_COMMAND) {
+    submarine?.clearSpeedCommand()
+    return
+  }
+  if (typeof fraction !== 'number') return
   submarine?.setSpeedCommand(fraction)
 }
 
 function handleHeadingCommand(headingString: string) {
+  if (headingString === MANUAL_HEADING_COMMAND) {
+    submarine?.clearHeadingCommand()
+    return
+  }
   const degrees = headingStringToDegrees(headingString)
   submarine?.setHeadingCommand(degrees)
+}
+
+function finishAlarmBuff() {
+  if (alarmTimeout) {
+    clearTimeout(alarmTimeout)
+    alarmTimeout = undefined
+  }
+  if (alarmCountdownTimer) {
+    clearInterval(alarmCountdownTimer)
+    alarmCountdownTimer = undefined
+  }
+  isAlarmActive.value = false
+  alarmRemainingSeconds.value = 0
+  submarine?.deactivateAlarmBuff()
+  alarmAudio?.stop()
+  alarmAudio = undefined
+}
+
+function updateAlarmCountdown() {
+  const remainingMs = Math.max(0, alarmEndsAt - Date.now())
+  alarmRemainingSeconds.value = Math.ceil(remainingMs / 1000)
+  if (remainingMs <= 0) finishAlarmBuff()
+}
+
+function handleAlarm() {
+  if (isAlarmActive.value || !submarine) return
+
+  isAlarmActive.value = true
+  alarmEndsAt = Date.now() + ALARM_BUFF_DURATION_SECONDS * 1000
+  alarmRemainingSeconds.value = ALARM_BUFF_DURATION_SECONDS
+  submarine.activateAlarmBuff()
+
+  alarmAudio = new PlayAudio(alarmAudioUrl, ALARM_BUFF_DURATION_SECONDS)
+  void alarmAudio.play()
+
+  alarmCountdownTimer = setInterval(updateAlarmCountdown, 250)
+  alarmTimeout = setTimeout(finishAlarmBuff, ALARM_BUFF_DURATION_SECONDS * 1000)
 }
 
 function handleSpaceFire() {
@@ -172,7 +743,11 @@ function scheduleTorpedoSalvo(plans: TorpedoLaunchPlan[]) {
       const torpedo = await submarine?.fireTorpedo(plan)
       if (torpedo) {
         hitDetect?.registerTorpedo(torpedo)
-        statusPanelRef.value?.markTubesFired([plan.tubeId])
+        activeSyncedTorpedoes.set(torpedo.id, torpedo)
+        const accepted = await uploadTorpedoState(torpedo, true)
+        if (accepted) {
+          statusPanelRef.value?.markTubesFired([plan.tubeId])
+        }
       } else {
         showLimitNotice('无备用鱼雷')
       }
@@ -188,9 +763,15 @@ function scheduleTorpedoSalvo(plans: TorpedoLaunchPlan[]) {
 
 // -------------------- 挂载 --------------------
 onMounted(async () => {
-  targetDefaultHeight.value = CARGOSHIP_HIGHT_SCENE
+  if (!roomId.value) {
+    await router.replace({ name: 'Room' })
+    return
+  }
+
   const container = viewer.value
   if (!container) return
+
+  window.addEventListener('beforeunload', sendLeaveBeacon)
 
   // 1. 创建引擎
   try {
@@ -237,27 +818,65 @@ onMounted(async () => {
     tuneSunMaterials(sunModel)
     engine.addSunModel(sunModel)
 
+    const initialWorldPayload = await fetchWorldSyncPayload()
+    const initialUBoatSpawn = getInitialUBoatSpawn(initialWorldPayload)
+
     // 潜艇
     //用户操作的潜艇
+    submarine = await SubmarineController.create(
+      engine, 
+      input, 
+      cameraCtrl, {
+      id: initialUBoatSpawn.id,
+      // coordinateCode: 'AD16',
+      worldPosition: initialUBoatSpawn.worldPosition,
+      initialHeadingDegrees: initialUBoatSpawn.initialHeadingDegrees,
+      initialDepthMeters: initialUBoatSpawn.initialDepthMeters,
+      isPlayerControlled: true,
+      modelUrl: submarineUrl,
+      torpedoModelUrl: torpedoUrl,
+      entityRegistry
+      })
 
+    if (initialUBoatSpawn.torpedoesRemaining !== undefined) {
+      remainingTorpedoes.value = initialUBoatSpawn.torpedoesRemaining
+      submarine.setTorpedorCount(initialUBoatSpawn.torpedoesRemaining)
+    }
+
+    submarineWorldX.value = submarine.root.position.x
+    submarineWorldZ.value = submarine.root.position.z
+    headingDegrees.value = submarine.compassHeading
+    ownUBoatModelID.value = submarine.id
 
     // HUD 回调
-
-
-    // 货船（AI 水面航行）
-
-
-    // 注册到引擎更新循环
-    for (const ship of cargoShips) {
-      engine.addUpdatable(ship)
+    submarine.onHudUpdate = (data) => {
+      speedKmh.value = data.speedKmh
+      depthMeters.value = data.depthMeters
+      headingDegrees.value = data.headingDegrees
+      periscopeRelativeBearingDegrees.value = data.periscopeRelativeBearingDegrees
+      navigationState.value = data.navigationState
+      submarineWorldX.value = data.worldX
+      submarineWorldZ.value = data.worldZ
+      isAimingViewActive.value = cameraCtrl?.isAiming ?? false
+      if (data.commandedSpeedFraction !== commandedSpeedFraction.value) {
+        commandedSpeedFraction.value = data.commandedSpeedFraction
+      }
+      remainingTorpedoes.value = data.torpedorCount
     }
+
+    submarine.onLimitNotice = (msg) => showLimitNotice(msg)
 
     //注册碰撞检测
     hitDetect = new HitDetectSystem({ scene: engine.scene })
-    hitDetect.registerSubmarine()//玩家操控的潜艇注册碰撞检验
-    hitDetect.registerSubmarine()//给其他玩家的操控的潜艇也注册碰撞检验
-    hitDetect.registerCargoShips()//给商船注册碰撞检验
+    hitDetect.registerSubmarine(submarine)
     engine.addUpdatable(hitDetect)
+
+    const hasBackendConvoy = initialWorldPayload
+      ? await applyWorldSyncPayload(initialWorldPayload)
+      : await pollWorldSync()
+    if (!hasBackendConvoy) {
+      await createFallbackCargoShips()
+    }
 
     // F 键：瞄准切换
     input.onAction = (code, pressed) => {
@@ -295,6 +914,7 @@ onMounted(async () => {
     isLoaded.value = true
     showHint.value = true
     hintTimer = setTimeout(() => { showHint.value = false }, 5000)
+    startOnlinePolling()
 
   } catch (error) {
     console.error('Failed to load 3D scene:', error)
@@ -304,10 +924,13 @@ onMounted(async () => {
 
 // -------------------- 卸载 --------------------
 onBeforeUnmount(() => {
+  window.removeEventListener('beforeunload', sendLeaveBeacon)
+  stopOnlinePolling()
   if (hintTimer) clearTimeout(hintTimer)
   if (noticeTimer) clearTimeout(noticeTimer)
   for (const timer of salvoTimers) clearTimeout(timer)
   salvoTimers.length = 0
+  finishAlarmBuff()
   if (hitDetect && engine) {
     engine.removeUpdatable(hitDetect)
     hitDetect.clear()
@@ -322,12 +945,23 @@ onBeforeUnmount(() => {
   ocean?.dispose()
   input?.detach()
   engine?.dispose()
+  entityRegistry?.clear()
   fileProgress.clear()
 })
 </script>
 
 <template>
   <section ref="viewer" class="viewer" aria-label="3D 潜艇模拟器">
+    <div v-if="isLoaded" class="online-room-bar">
+      <div>
+        <span>ROOM</span>
+        <strong>{{ roomId }}</strong>
+      </div>
+      <el-button type="danger" size="small" :loading="isLeavingRoom" @click="leaveCurrentRoom">
+        退出房间
+      </el-button>
+    </div>
+
     <!-- 深水渐变遮罩 -->
     <div v-if="isLoaded && showUnderwaterScreen" class="underwater-screen" aria-hidden="true"></div>
 
@@ -348,6 +982,28 @@ onBeforeUnmount(() => {
       :commanded-speed-fraction="commandedSpeedFraction"
       @speed-command="handleSpeedCommand"
       @heading-command="handleHeadingCommand"
+    />
+
+    <VoyageMap
+      v-if="isLoaded"
+      :submarine-world-x="submarineWorldX"
+      :submarine-world-z="submarineWorldZ"
+      :heading-degrees="headingDegrees"
+    />
+
+    <TopRightPanel
+      v-if="isLoaded"
+      :is-alarm-active="isAlarmActive"
+      :alarm-remaining-seconds="alarmRemainingSeconds"
+      @alarm="handleAlarm"
+    />
+
+    <CommunicationPanel
+      ref="communicationRef"
+      v-if="isLoaded && !settlement"
+      :room-id="roomId"
+      :players="onlinePlayers"
+      :self-uuid="selfUUID"
     />
 
     <!-- 潜望镜/水面瞄准叠加层 -->
@@ -388,5 +1044,25 @@ onBeforeUnmount(() => {
     <Transition name="notice">
       <p v-if="limitNotice" class="limit-notice" role="status">{{ limitNotice }}</p>
     </Transition>
+
+    <div v-if="settlement" class="settlement-overlay" role="dialog" aria-modal="true" aria-label="本艇已被击沉">
+      <section class="settlement-panel">
+        <p>本艇已被击沉</p>
+        <h2>本次游戏结算</h2>
+        <dl>
+          <div>
+            <dt>击沉货船数量</dt>
+            <dd>{{ settlement.cargoShipsSunk }}</dd>
+          </div>
+          <div>
+            <dt>总吨位数</dt>
+            <dd>{{ settlement.totalTonnage }}</dd>
+          </div>
+        </dl>
+        <el-button type="primary" :loading="isLeavingRoom" @click="leaveCurrentRoom">
+          退出房间
+        </el-button>
+      </section>
+    </div>
   </section>
 </template>
