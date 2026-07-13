@@ -339,3 +339,6 @@ blob-report/
 
 *.glb
 
+.DS_Store
+
+**/.DS_Store
