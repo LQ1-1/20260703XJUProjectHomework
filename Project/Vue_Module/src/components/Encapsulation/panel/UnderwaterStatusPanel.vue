@@ -10,6 +10,7 @@ import {
 } from '../modules/navigationMath.ts'
 import type { TorpedoLaunchPlan, TorpedoTubeState } from '../torpedor/torpedoTypes'
 import '../../../css/underwater-status-panel.css'
+import PlayAudio from '@/common/audiotool/PlayAudio.ts'
 
 // -------------------- 航速选项 --------------------
 interface SpeedOption {
@@ -137,6 +138,25 @@ function handleUseRangeDistance(distance: number): void {
   torpedoComputerRef.value?.setTargetDistance(distance)
   showTorpedoComputer.value = true
 }
+
+function handleTorpedoComputerOpened(): void {
+  //播放音频
+  void (async () => {
+    const playAudio1 = new PlayAudio('/assets/audio/RohrEinsBisVierBewassern.wav', 3)
+    await playAudio1.play()
+
+    const playAudio2 = new PlayAudio('/assets/audio/RohrEinsBisVierKlarmachen.wav', 2)
+    await playAudio2.play()
+  })()
+}
+
+watch(showTorpedoComputer, (newValue, oldValue) => {
+  if (oldValue === false && newValue === true) {
+    handleTorpedoComputerOpened()
+  }
+})
+
+
 </script>
 
 <template>
@@ -150,12 +170,7 @@ function handleUseRangeDistance(distance: number): void {
       <div>
         <dt>航速</dt>
         <dd>{{ speedKnots.toFixed(1) }} kn</dd>
-        <select
-          v-model="selectedSpeedFraction"
-          class="instrument-select"
-          aria-label="航速指令"
-          @change="blurSelect"
-        >
+        <select v-model="selectedSpeedFraction" class="instrument-select" aria-label="航速指令" @change="blurSelect">
           <option v-for="opt in SPEED_OPTIONS" :key="opt.value" :value="opt.value">
             {{ opt.label }}
           </option>
@@ -164,12 +179,7 @@ function handleUseRangeDistance(distance: number): void {
       <div>
         <dt>航向</dt>
         <dd>{{ headingDegrees.toFixed(0).padStart(3, '0') }}°</dd>
-        <select
-          v-model="selectedHeadingString"
-          class="instrument-select"
-          aria-label="航向指令"
-          @change="blurSelect"
-        >
+        <select v-model="selectedHeadingString" class="instrument-select" aria-label="航向指令" @change="blurSelect">
           <option v-for="opt in HEADING_OPTIONS" :key="opt.value" :value="opt.value">
             {{ opt.label }}
           </option>
@@ -215,13 +225,13 @@ function handleUseRangeDistance(distance: number): void {
     </div>
 
     <div v-if="showTorpedoComputer || showRangeComputer" class="computer-stack">
-      
+
       <RangeComputer v-if="showRangeComputer" :default-target-height="targetDefaultHeight"
         @use-distance="handleUseRangeDistance" />
 
       <TorpedorDataComputer v-if="showTorpedoComputer" ref="torpedoComputerRef" :heading-degrees="headingDegrees"
-        :periscope-relative-bearing-degrees="periscopeRelativeBearingDegrees"
-        :current-depth-meters="depthMeters" :remaining-torpedoes="remainingTorpedoes" />
+        :periscope-relative-bearing-degrees="periscopeRelativeBearingDegrees" :current-depth-meters="depthMeters"
+        :remaining-torpedoes="remainingTorpedoes" />
     </div>
 
     <BearingCompassPanel :heading-degrees="headingDegrees"

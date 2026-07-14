@@ -20,6 +20,24 @@
   backdrop-filter: blur(10px);
 }
 
+.mode-card--start {
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    transform 160ms ease;
+}
+
+.mode-card--start:hover {
+  border-color: rgba(125, 198, 239, 0.72);
+  background: rgba(8, 30, 46, 0.92);
+  transform: translateY(-1px);
+}
+
+.mode-card--start:active {
+  transform: translateY(0);
+}
+
 .mode-header {
   text-align: center;
 }

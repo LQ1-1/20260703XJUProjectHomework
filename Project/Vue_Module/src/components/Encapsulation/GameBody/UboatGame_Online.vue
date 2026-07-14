@@ -119,6 +119,8 @@ const loadingLabel = computed(() => `${Math.round(loadingProgress.value)}%`)
 const speedKnots = computed(() => speedKmh.value / 1.852)
 const isSubmerged = computed(() => depthMeters.value > 0)
 
+let countFButtonDown = 0
+
 // 始终显示 Panel；深水时最大化，其余场景左下角精简显示
 const underwaterStatusMode = computed<'full' | 'compact'>(() =>
   depthMeters.value > UNDERWATER_UI_DEPTH_METERS && !isAimingViewActive.value ? 'full' : 'compact',
@@ -699,6 +701,9 @@ function updateAlarmCountdown() {
 function handleAlarm() {
   if (isAlarmActive.value || !submarine) return
 
+  let playAudio = new PlayAudio('/assets/audio/Alarm.wav', ALARM_BUFF_DURATION_SECONDS)
+  playAudio.play()
+
   isAlarmActive.value = true
   alarmEndsAt = Date.now() + ALARM_BUFF_DURATION_SECONDS * 1000
   alarmRemainingSeconds.value = ALARM_BUFF_DURATION_SECONDS
@@ -824,8 +829,8 @@ onMounted(async () => {
     // 潜艇
     //用户操作的潜艇
     submarine = await SubmarineController.create(
-      engine, 
-      input, 
+      engine,
+      input,
       cameraCtrl, {
       id: initialUBoatSpawn.id,
       // coordinateCode: 'AD16',
@@ -836,7 +841,7 @@ onMounted(async () => {
       modelUrl: submarineUrl,
       torpedoModelUrl: torpedoUrl,
       entityRegistry
-      })
+    })
 
     if (initialUBoatSpawn.torpedoesRemaining !== undefined) {
       remainingTorpedoes.value = initialUBoatSpawn.torpedoesRemaining
@@ -881,6 +886,28 @@ onMounted(async () => {
     // F 键：瞄准切换
     input.onAction = (code, pressed) => {
       if (code === 'KeyF' && pressed && submarine && cameraCtrl) {
+
+        if (submarine.isAtPeriscopeDepth()) {
+          countFButtonDown++
+          if (countFButtonDown % 2 === 1) {
+            submarine.currentDepth
+            let playAudio = new PlayAudio('/assets/audio/AufSehrohrtiefegehen.wav', 2)
+            playAudio.play()
+
+            let playAudio2 = new PlayAudio('/assets/audio/BootSteuertSehrohrtiefe.wav', 2)
+            playAudio2.play()
+
+
+            void (async () => {
+              let playAudio = new PlayAudio('/assets/audio/AufSehrohrtiefegehen.wav', 2)
+              await playAudio.play()
+
+              let playAudio2 = new PlayAudio('/assets/audio/BootSteuertSehrohrtiefe.wav', 2)
+              await playAudio2.play()
+            })()
+          }
+        }
+
         const msg = cameraCtrl.toggleAiming(submarine)
         if (msg) showLimitNotice(msg)
       }
@@ -912,6 +939,10 @@ onMounted(async () => {
     // 完成加载
     loadingProgress.value = 100
     isLoaded.value = true
+
+    let playAudio = new PlayAudio('/assets/audio/AufGefechstation.wav', 2)
+    playAudio.play()
+
     showHint.value = true
     hintTimer = setTimeout(() => { showHint.value = false }, 5000)
     startOnlinePolling()
@@ -966,57 +997,28 @@ onBeforeUnmount(() => {
     <div v-if="isLoaded && showUnderwaterScreen" class="underwater-screen" aria-hidden="true"></div>
 
     <!-- HUD 面板 -->
-    <UnderwaterStatusPanel
-      ref="statusPanelRef"
-      v-if="isLoaded && showUnderwaterStatus"
-      :mode="underwaterStatusMode"
-      :depth-meters="depthMeters"
-      :speed-knots="speedKnots"
-      :heading-degrees="headingDegrees"
-      :periscope-relative-bearing-degrees="periscopeRelativeBearingDegrees"
-      :navigation-state="navigationState"
-      :submarine-world-x="submarineWorldX"
-      :submarine-world-z="submarineWorldZ"
-      :target-default-height="targetDefaultHeight"
-      :remaining-torpedoes="remainingTorpedoes"
-      :commanded-speed-fraction="commandedSpeedFraction"
-      @speed-command="handleSpeedCommand"
-      @heading-command="handleHeadingCommand"
-    />
+    <UnderwaterStatusPanel ref="statusPanelRef" v-if="isLoaded && showUnderwaterStatus" :mode="underwaterStatusMode"
+      :depth-meters="depthMeters" :speed-knots="speedKnots" :heading-degrees="headingDegrees"
+      :periscope-relative-bearing-degrees="periscopeRelativeBearingDegrees" :navigation-state="navigationState"
+      :submarine-world-x="submarineWorldX" :submarine-world-z="submarineWorldZ"
+      :target-default-height="targetDefaultHeight" :remaining-torpedoes="remainingTorpedoes"
+      :commanded-speed-fraction="commandedSpeedFraction" @speed-command="handleSpeedCommand"
+      @heading-command="handleHeadingCommand" />
 
-    <VoyageMap
-      v-if="isLoaded"
-      :submarine-world-x="submarineWorldX"
-      :submarine-world-z="submarineWorldZ"
-      :heading-degrees="headingDegrees"
-    />
+    <VoyageMap v-if="isLoaded" :submarine-world-x="submarineWorldX" :submarine-world-z="submarineWorldZ"
+      :heading-degrees="headingDegrees" />
 
-    <TopRightPanel
-      v-if="isLoaded"
-      :is-alarm-active="isAlarmActive"
-      :alarm-remaining-seconds="alarmRemainingSeconds"
-      @alarm="handleAlarm"
-    />
+    <TopRightPanel v-if="isLoaded" :is-alarm-active="isAlarmActive" :alarm-remaining-seconds="alarmRemainingSeconds"
+      @alarm="handleAlarm" />
 
-    <CommunicationPanel
-      ref="communicationRef"
-      v-if="isLoaded && !settlement"
-      :room-id="roomId"
-      :players="onlinePlayers"
-      :self-uuid="selfUUID"
-    />
+    <CommunicationPanel ref="communicationRef" v-if="isLoaded && !settlement" :room-id="roomId" :players="onlinePlayers"
+      :self-uuid="selfUUID" />
 
     <!-- 潜望镜/水面瞄准叠加层 -->
-    <div
-      v-if="isLoaded && isAimingViewActive"
-      class="periscope-view"
-      :aria-label="navigationState"
-      @pointerdown="cameraCtrl?.handlePointerDown($event)"
-      @pointermove="cameraCtrl?.handlePointerMove($event)"
-      @pointerup="cameraCtrl?.handlePointerUp($event)"
-      @pointercancel="cameraCtrl?.handlePointerUp($event)"
-      @pointerleave="cameraCtrl?.handlePointerUp($event)"
-    >
+    <div v-if="isLoaded && isAimingViewActive" class="periscope-view" :aria-label="navigationState"
+      @pointerdown="cameraCtrl?.handlePointerDown($event)" @pointermove="cameraCtrl?.handlePointerMove($event)"
+      @pointerup="cameraCtrl?.handlePointerUp($event)" @pointercancel="cameraCtrl?.handlePointerUp($event)"
+      @pointerleave="cameraCtrl?.handlePointerUp($event)">
       <img :src="periscopeSightUrl" alt="" aria-hidden="true" draggable="false" />
     </div>
 

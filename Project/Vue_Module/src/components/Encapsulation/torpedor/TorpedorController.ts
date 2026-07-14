@@ -16,21 +16,22 @@ import type { Updatable, GameEngine } from '../engine/GameEngine'
 import type { CollisionEntitySnapshot, CollisionEvent } from '../modules/hitdetect'
 import { CollisionDecision, CollisionSituationType } from '../modules/hitdetect.ts'
 import { normalizeSubmarine, disposeObject } from '../modules/modelUtils'
-import { MODEL_LENGTH_SCENE, METERS_TO_SCENE } from '../constant/sceneUnits'
+import { MODEL_LENGTH_SCENE, METERS_TO_SCENE, GAME_SPEED_MULTIPLIER } from '../constant/sceneUnits'
 import { GameEntityRegistry } from '../entitymanager/GameEntityRegistry.ts'
 import { TorpedoExplosion } from '../ExplosionSplashEffect/explosionSplashEffect.ts'
+import PlayAudio from '@/common/audiotool/PlayAudio.ts'
 
 
 /** 鱼雷最大存活时间（秒）G7a */
 export const TORPEDO_MAX_LIFETIME_G7A = 220 //G7e鱼雷的动力有效维持时间是3~4分钟
 /** 鱼雷航速（场景单位/秒，约 44 节）G7a */
-export const TORPEDO_SPEED_G7A = (81_500 * METERS_TO_SCENE) / 3600
+export const TORPEDO_SPEED_G7A = (81_500 * METERS_TO_SCENE * GAME_SPEED_MULTIPLIER) / 3600
 
 
 /** 鱼雷最大存活时间（秒）G7e */
 export const TORPEDO_MAX_LIFETIME_G7E = 324 //G7e鱼雷的动力有效维持时间是5~7分钟
 /** 鱼雷航速（场景单位/秒，约 30 节）G7e */
-export const TORPEDO_SPEED_G7E = (55_600 * METERS_TO_SCENE) / 3600
+export const TORPEDO_SPEED_G7E = (55_600 * METERS_TO_SCENE * GAME_SPEED_MULTIPLIER) / 3600
 
 export const TORPEDO_FINAL_DEPTH_OFFSET=1.5
 
@@ -269,6 +270,9 @@ export class TorpedorController implements Updatable {
         //播放爆炸动画
         TorpedoExplosion(this.root.position.clone(), this.engine)
 
+        let playAudio0 = new PlayAudio('/assets/audio/TorpedoHit.wav', 4);
+        playAudio0.play()
+
         //上传击沉记录
 
         //回收鱼雷模型
@@ -284,6 +288,9 @@ export class TorpedorController implements Updatable {
 
         //播放爆炸动画
         TorpedoExplosion(this.root.position.clone(), this.engine)
+
+        let playAudio1 = new PlayAudio('/assets/audio/TorpedoHit.wav', 4);
+        playAudio1.play()
 
         //上传击沉记录
 

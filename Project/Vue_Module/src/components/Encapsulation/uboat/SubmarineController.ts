@@ -46,6 +46,7 @@ import { ExplosionSplashEffect } from '../ExplosionSplashEffect/explosionSplashE
 import { GameEntityRegistry } from '../entitymanager/GameEntityRegistry.ts'
 import { TorpedorController } from '../torpedor/TorpedorController.ts'
 import type { TorpedoLaunchPlan } from '../torpedor/torpedoTypes.ts'
+import PlayAudio from '@/common/audiotool/PlayAudio.ts'
 
 export const TORPEDO_FORWARD_OFFSET_FROM_THE_BOW = 3.5
 export const TORPEDO_LATERAL_OFFSET_FROM_THE_CENTERLINE=1
@@ -132,6 +133,8 @@ export class SubmarineController implements Updatable {
   private lastHudUpdateTime = 0
   private surfaceLimitWasActive = false
   private depthLimitWasActive = false
+  private floodAudioPlayedForCurrentDive = false
+  private blowAudioPlayedForCurrentAscent = false
   private _sampledWaterHeight = 0
 
   // ---- 鱼雷数量 ----
@@ -400,10 +403,33 @@ export class SubmarineController implements Updatable {
   // ==================== 深度控制 ====================
 
   private updatePlayerDepth(delta: number, isAiming: boolean): void {
+    const isDiveKeyPressed = !isAiming && this.input.pressedKeys.has('KeyL')
+    const isSurfaceKeyPressed = !isAiming && this.input.pressedKeys.has('KeyK')
+
+    if (this.isAtSurface() && isDiveKeyPressed && !this.floodAudioPlayedForCurrentDive) {
+      const playAudio = new PlayAudio('/assets/audio/Fluten.wav', 2)
+      void playAudio.play()
+      this.floodAudioPlayedForCurrentDive = true
+    }
+
+    if (this.isAtSurface() && !isDiveKeyPressed) {
+      this.floodAudioPlayedForCurrentDive = false
+    }
+
+    if (!this.isAtSurface() && isSurfaceKeyPressed && !this.blowAudioPlayedForCurrentAscent) {
+      const playAudio = new PlayAudio('/assets/audio/Anblassen.wav', 1)
+      void playAudio.play()
+      this.blowAudioPlayedForCurrentAscent = true
+    }
+
+    if (!isSurfaceKeyPressed) {
+      this.blowAudioPlayedForCurrentAscent = false
+    }
+
     const diveInput = isAiming
       ? 0
-      : (this.input.pressedKeys.has('KeyL') ? 1 : 0) -
-      (this.input.pressedKeys.has('KeyK') ? 1 : 0)
+      : (isDiveKeyPressed ? 1 : 0) -
+      (isSurfaceKeyPressed ? 1 : 0)
 
     if (diveInput !== 0) {
       const verticalSpeed =
@@ -707,6 +733,10 @@ export class SubmarineController implements Updatable {
       entityRegistry: this.entityRegistry,
     })
 
+    //播放鱼雷发射音效
+    let playAudio3 = new PlayAudio('/assets/audio/TorpedoLaunchSoundEffect.wav', 3)
+    playAudio3.play()
+
     this.setTorpedorCount(this.torpedorCount - 1)
     return torpedo
   }
@@ -778,6 +808,7 @@ export class SubmarineController implements Updatable {
 
         //播放爆炸动画
         /********/
+        
 
         //向后端更新Wolfpack信息，该潜艇已被击沉
 

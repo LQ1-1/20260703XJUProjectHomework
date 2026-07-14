@@ -102,6 +102,17 @@ const timer = window.setInterval(() => {
   }
 }, 1000)
 
+watch(
+  () => props.remainingTorpedoes,
+  (remaining) => {
+    for (const tube of tubes.value) {
+      if (tube.reloadEndTime === null) {
+        tube.isLoaded = remaining > 0
+      }
+    }
+  },
+)
+
 onBeforeUnmount(() => {
   window.clearInterval(timer)
 })

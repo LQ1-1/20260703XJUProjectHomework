@@ -75,3 +75,7 @@ export const DEEP_BACKGROUND = new THREE.Color(0x00070d)
 export const CARGOSHIP_HIGHT_SCENE = 25.803 //船高25.803（场景单位）
 
 export const RANGE_FACTOR = 139.518 //测距系数
+
+
+//游戏速度倍率，2026-07-14加入
+export const GAME_SPEED_MULTIPLIER = 2
