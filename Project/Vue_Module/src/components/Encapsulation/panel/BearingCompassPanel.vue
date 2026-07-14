@@ -2,9 +2,9 @@
 import { computed } from 'vue'
 import '../../../css/bearing-compass-panel.css'
 
-const marineCompassUrl = '/assets/Bearing Dial/MarineCompass_0.png'
-const relativeBearingDialUrl = '/assets/Bearing Dial/RelativeBearingDial_0.png'
-const hullIndicatorUrl = '/assets/Bearing Dial/hullIndicator.png'
+const marineCompassUrl = '/assets/BearingDial/MarineCompass_0.png'
+const relativeBearingDialUrl = '/assets/BearingDial/RelativeBearingDial_0.png'
+const hullIndicatorUrl = '/assets/BearingDial/hullIndicator.png'
 
 const props = defineProps<{
   headingDegrees: number

@@ -6,7 +6,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import UnderwaterStatusPanel from './UnderwaterStatusPanel.vue'
 import submarineUrl from '../../model/type_vii_d_u-boat.glb?url'
 import sunUrl from '../../model/sun.glb?url'
-import periscopeSightUrl from '../../assets/Uboot Periscope sight/UBootPeriscopeAimingSight.png?url'
+import periscopeSightUrl from '../../assets/UbootPeriscopesight/UBootPeriscopeAimingSight.png?url'
 import '../../css/test-3d-programized-ocean.css'
 import { moveTowards } from './modules/mathUtils'
 import {

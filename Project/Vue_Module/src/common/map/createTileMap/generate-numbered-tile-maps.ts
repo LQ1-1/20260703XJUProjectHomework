@@ -2,7 +2,7 @@ import { createCanvas } from 'canvas'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 
-const OUTPUT_ROOT = resolve(process.cwd(), 'public/assets/Tile Maps/tiles')
+const OUTPUT_ROOT = resolve(process.cwd(), 'public/assets/TileMaps/tiles')
 
 const IMAGE_TILE_SIZE = 450
 const FULL_MAP_WORLD_SIZE = 12150

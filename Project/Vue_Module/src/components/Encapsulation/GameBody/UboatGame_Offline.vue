@@ -35,7 +35,7 @@ const submarineUrl = '/assets/model/type_vii_d_u-boat.glb'
 const cargoshipUrl = '/assets/model/liberty_ship.glb'
 const torpedoUrl = '/assets/model/mkxii_torpedo.glb'
 const sunUrl = '/assets/model/sun.glb'
-const periscopeSightUrl = '/assets/Uboot Periscope sight/UBootPeriscopeAimingSight.png'
+const periscopeSightUrl = '/assets/UbootPeriscopesight/UBootPeriscopeAimingSight.png'
 const alarmAudioUrl = ''
 
 //------本地测试的版本(尚未和后端服务器进行交互)-------//

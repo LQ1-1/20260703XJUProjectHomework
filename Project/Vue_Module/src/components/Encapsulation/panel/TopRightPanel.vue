@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import MechanicalStopwatch from '../../../common/MechanicalStopwatch/MechanicalStopwatch.vue'
 import '../../../css/top-right-panel.css'
 
 const props = defineProps<{
@@ -24,6 +25,8 @@ const emit = defineEmits<{
       </button>
     </section>
 
-    <section class="top-right-panel__section top-right-panel__section--stopwatch" aria-hidden="true"></section>
+    <section class="top-right-panel__section top-right-panel__section--stopwatch" aria-label="机械秒表">
+      <MechanicalStopwatch class="top-right-panel__stopwatch" />
+    </section>
   </aside>
 </template>

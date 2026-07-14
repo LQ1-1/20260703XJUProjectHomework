@@ -245,7 +245,7 @@ export class MapCode {
 
     //封装图片读取路径
     private getTileMapPath(layer: number, column: number, row: number) {
-        return `/assets/Tile Maps/tiles/${layer}/tile_${column}_${row}.png`
+        return `/assets/TileMaps/tiles/${layer}/tile_${column}_${row}.png`
     }
 
     private getTileMapsByCenter(centerX: number, centerZ: number, layer: number) {

@@ -54,7 +54,7 @@ export class MapRender {
     this.maxZoom = options.maxZoom ?? DEFAULT_MAX_ZOOM
 
     const indicatorUrl =
-      options.indicatorUrl ?? '/assets/Bearing Dial/hullMapIndicator.png'
+      options.indicatorUrl ?? '/assets/BearingDial/hullMapIndicator.png'
     this.indicatorImage = this.loadImage(indicatorUrl)
 
     this.resize()
@@ -274,7 +274,7 @@ export class MapRender {
   }
 
   private getTileMapPath(layer: number, column: number, row: number): string {
-    return `/assets/Tile Maps/tiles/${layer}/tile_${column}_${row}.png`
+    return `/assets/TileMaps/tiles/${layer}/tile_${column}_${row}.png`
   }
 
   private clampPoint(point: MapPoint): MapPoint {

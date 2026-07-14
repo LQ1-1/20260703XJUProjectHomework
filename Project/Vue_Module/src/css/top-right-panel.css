@@ -52,7 +52,15 @@
 }
 
 .top-right-panel__section--stopwatch {
-  height: 136px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 250;
+  overflow: visible;
+}
+
+.top-right-panel__stopwatch {
+  width: 104px;
 }
 
 @media (max-width: 600px) {
@@ -69,5 +77,9 @@
 
   .top-right-panel__section--stopwatch {
     height: 112px;
+  }
+
+  .top-right-panel__stopwatch {
+    width: 85px;
   }
 }
