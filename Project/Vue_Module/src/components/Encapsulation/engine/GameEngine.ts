@@ -19,6 +19,10 @@ export interface Updatable {
   update(delta: number, time: number): void
 }
 
+export interface UnderwaterAppearanceOptions {
+  fogDensityMultiplier?: number
+}
+
 export interface GameEngineOptions {
   container: HTMLElement
   cameraFov?: number
@@ -168,7 +172,11 @@ export class GameEngine {
   }
 
   /** 根据深度更新水下视觉效果（背景、雾、灯光） */
-  updateUnderwaterAppearance(depthSceneUnits: number, depthMeters: number): void {
+  updateUnderwaterAppearance(
+    depthSceneUnits: number,
+    depthMeters: number,
+    options: UnderwaterAppearanceOptions = {},
+  ): void {
     if (
       !(this.scene.background instanceof THREE.Color) ||
       !(this.scene.fog instanceof THREE.FogExp2)
@@ -182,7 +190,8 @@ export class GameEngine {
 
     this.scene.background.lerpColors(surfaceBg, deepBg, depthFactor)
     this.scene.fog.color.copy(this.scene.background)
-    this.scene.fog.density = THREE.MathUtils.lerp(0.0008, 0.03, depthFactor)
+    const fogDensity = THREE.MathUtils.lerp(0.0008, 0.03, depthFactor)
+    this.scene.fog.density = fogDensity * (options.fogDensityMultiplier ?? 1)
     this.hemisphereLight.intensity = THREE.MathUtils.lerp(3.4, 0.22, depthFactor)
     this.keyLight.intensity = THREE.MathUtils.lerp(6.2, 0.28, depthFactor)
     this.rimLight.intensity = THREE.MathUtils.lerp(2.6, 0.75, depthFactor)

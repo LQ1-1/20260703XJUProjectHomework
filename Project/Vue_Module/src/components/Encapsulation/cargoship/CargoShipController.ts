@@ -226,16 +226,21 @@ export class CargoShipController implements Updatable {
 
     const targetY = -SINK_DEPTH
     const sinkSpeed = 3 // 场景单位/秒
-    this.root.position.y = Math.max(
-      this.root.position.y - sinkSpeed * delta,
-      targetY,
-    )
 
     this.visual.rotation.z = THREE.MathUtils.damp(
       this.visual.rotation.z,
       this.sinkPitch,
-      0.7,
+      0.2,
       delta,
+    )
+
+    const isCapsized = Math.abs(this.visual.rotation.z - this.sinkPitch) <= 0.01
+    if (!isCapsized) return
+
+    this.visual.rotation.z = this.sinkPitch
+    this.root.position.y = Math.max(
+      this.root.position.y - sinkSpeed * delta,
+      targetY,
     )
 
     if (Math.abs(this.root.position.y - targetY) <= 0.5) {

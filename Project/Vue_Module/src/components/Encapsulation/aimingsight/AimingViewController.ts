@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 
-import { SCENE_TO_METERS, METERS_TO_SCENE, SURFACE_DEPTH_EPSILON_SCENE } from '../constant/sceneUnits'
+import { SCENE_TO_METERS, SURFACE_DEPTH_EPSILON_SCENE } from '../constant/sceneUnits'
 
 import type { SubmarineController } from '../uboat/SubmarineController'
 
@@ -34,7 +34,9 @@ export class AimingViewController {
 
     private readonly surfaceAimForwardOffset = 3
 
-    private readonly lookDistance = 200
+    private readonly surfaceAimLookDistance = 450
+
+    private readonly periscopeLookDistance = 450
 
     private readonly mouseSensitivity = 0.004
 
@@ -178,6 +180,8 @@ export class AimingViewController {
 
         const forwardOffset = isSurfaceAim ? this.surfaceAimForwardOffset : 0
 
+        const lookDistance = isSurfaceAim ? this.surfaceAimLookDistance : this.periscopeLookDistance
+
         this.cameraWorldOffset.set(
 
             Math.cos(submarine.heading) * forwardOffset,
@@ -198,11 +202,11 @@ export class AimingViewController {
 
         camera.lookAt(
 
-            eyeX + Math.cos(this.periscopeYaw) * this.lookDistance,
+            eyeX + Math.cos(this.periscopeYaw) * lookDistance,
 
             eyeY,
 
-            eyeZ - Math.sin(this.periscopeYaw) * this.lookDistance,
+            eyeZ - Math.sin(this.periscopeYaw) * lookDistance,
 
         )
 
@@ -235,8 +239,6 @@ export class AimingViewController {
     }
 
 }
-
-
 
 
 

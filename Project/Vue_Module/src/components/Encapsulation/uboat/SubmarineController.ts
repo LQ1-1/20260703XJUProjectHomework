@@ -57,6 +57,8 @@ export const ALARM_BUFF_DURATION_SECONDS = 10
 export const ALARM_DIVE_SPEED_MULTIPLIER = 2.15
 /** ALARM 最大俯仰角：buff 期间上浮抬头和下潜低头上限提升到 75 度。 */
 export const ALARM_MAX_PITCH_DEGREES = 75
+/** 潜望镜贴近海面但需要保留更远识别距离，单独减弱该模式的雾效。 */
+const PERISCOPE_FOG_DENSITY_MULTIPLIER = 0.35
 
 
 export interface SubmarineOptions {
@@ -331,7 +333,11 @@ export class SubmarineController implements Updatable {
       if (this.isPlayerControlled) {
         this.cameraCtrl.update(this)
         this.engine.updateSunAndLight(this.root.position)
-        this.engine.updateUnderwaterAppearance(this.currentDepth, this.depthMeters)
+        this.engine.updateUnderwaterAppearance(
+          this.currentDepth,
+          this.depthMeters,
+          this.underwaterAppearanceOptions(),
+        )
 
         if (time - this.lastHudUpdateTime >= 100) {
           this.lastHudUpdateTime = time
@@ -391,7 +397,11 @@ export class SubmarineController implements Updatable {
     this.engine.updateSunAndLight(this.root.position)
 
     // 水下视觉效果
-    this.engine.updateUnderwaterAppearance(this.currentDepth, this.depthMeters)
+    this.engine.updateUnderwaterAppearance(
+      this.currentDepth,
+      this.depthMeters,
+      this.underwaterAppearanceOptions(),
+    )
 
     // HUD 更新（限制 100ms 一次）
     if (time - this.lastHudUpdateTime >= 100) {
@@ -475,6 +485,13 @@ export class SubmarineController implements Updatable {
       this.verticalSpeed = 0
     } else {
       this.currentDepth = THREE.MathUtils.clamp(nextDepth, 0, MAX_DEPTH_SCENE)
+    }
+  }
+
+  private underwaterAppearanceOptions() {
+    return {
+      fogDensityMultiplier:
+        this.cameraCtrl.aimingMode === 'periscope' ? PERISCOPE_FOG_DENSITY_MULTIPLIER : 1,
     }
   }
 

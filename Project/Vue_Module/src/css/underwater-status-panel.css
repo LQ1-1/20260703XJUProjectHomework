@@ -2,7 +2,7 @@
   position: absolute;
   z-index: 5;
   overflow: auto;
-  max-height: calc(100vh - 36px);
+  max-height: calc(100vh - 120px);
   border: 1px solid rgba(148, 192, 212, 0.28);
   border-radius: 8px;
   background: rgba(7, 11, 13, 0.72);
