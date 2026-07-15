@@ -1,4 +1,344 @@
-Project/Vue_Module/public/model/liberty_ship.glb
-Project/Vue_Module/public/model/
-Project/Vue_Module/public/model/
-Project/Vue_Module/public/model/
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+.DS_Store
+dist
+dist-ssr
+coverage
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+*.tsbuildinfo
+
+.eslintcache
+
+# Cypress
+/cypress/videos/
+/cypress/screenshots/
+
+# Vitest
+__screenshots__/
+
+# Vite
+*.timestamp-*-*.mjs
+
+
+# OS files
+.DS_Store
+**/.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# IDE and editor files
+.idea/
+.vscode/
+.claude/
+*.iml
+*.ipr
+*.iws
+*.swp
+*.swo
+*~
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+*.bak
+*.backup
+*.orig
+*.rej
+tmp*/
+temp*/
+cache/
+**/cache/
+
+# Environment and local config
+.env
+.env.*
+!.env.example
+*.local
+local.properties
+
+# Secret keys and certificates must not be committed.
+crypto_keys*/
+**/crypto_keys*/
+*.pem
+*.key
+*.crt
+*.cer
+*.p12
+*.pfx
+*.jks
+*.keystore
+id_rsa
+id_rsa.pub
+id_ed25519
+id_ed25519.pub
+private_key.*
+public_key.*
+
+# Python
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+.venv/
+venv/
+env/
+ENV/
+pip-wheel-metadata/
+*.egg-info/
+dist/
+build/
+
+# Java/Maven
+target/
+**/target/
+*.class
+*.jar
+*.war
+*.ear
+dependency-reduced-pom.xml
+.mvn/timing.properties
+
+# C/C++/CMake/Make
+CMakeFiles/
+**/CMakeFiles/
+CMakeCache.txt
+CMakeUserPresets.json
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+Makefile
+*.o
+*.obj
+*.lo
+*.la
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+*.out
+*.app/
+*.dSYM/
+
+# Qt
+*.qmake.stash
+*.pro.user
+*.pro.user.*
+*.autosave
+moc_*.cpp
+qrc_*.cpp
+ui_*.h
+.qtc_clangd/
+*.qmlc
+*.jsc
+
+# Xcode
+Build/
+**/Build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+*.xcscmblueprint
+
+# Packaged releases and archives
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.gz
+*.7z
+*.rar
+
+# Runtime and test artifacts
+test_input.bin
+test_output.bin
+*.db
+*.sqlite
+*.sqlite3
+*.pid
+
+# Local copies from teammates or external modules.
+LZY/
+LQH/
+Version0003/
+
+# Local documents and screenshots.
+*.pdf
+*.png
+!Desktop_Module/src/assets/app-icon.png
+*.jpg
+*.jpeg
+*.docx
+*.doc
+对话.docx
+题目.pdf
+题目.png
+加密模块需要的函数.md
+
+# Project-specific ignored files.
+**/httplib.h
+
+
+# Xcode build files
+build/
+DerivedData/
+
+# Xcode user-specific files
+*.xcuserstate
+*.xcuserdatad/
+xcuserdata/
+
+# Xcode workspace user settings
+*.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcworkspace/xcuserdata/
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved
+
+# CocoaPods
+Pods/
+
+# Carthage
+Carthage/Build/
+
+# Fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/**/*.png
+fastlane/test_output/
+
+# macOS system files
+.DS_Store
+
+# App archives and generated packages
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Logs
+*.log
+
+# Environment / secrets
+.env
+.env.*
+
+
+
+# Gradle / Kotlin
+.gradle/
+.kotlin/
+**/build/
+
+# Android Studio / IntelliJ
+.idea/
+*.iml
+
+# Local SDK configuration
+local.properties
+
+# Native build outputs
+.externalNativeBuild/
+.cxx/
+
+# Generated packages and captures
+captures/
+*.apk
+*.aab
+
+# Signing credentials
+*.jks
+*.keystore
+keystore.properties
+signing.properties
+
+# Local secrets
+secrets.properties
+.env
+.env.*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+
+
+# Environment files (keep example templates in Git)
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Secrets and certificates
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+
+# Temporary, cache, and backup files
+*.tmp
+*.temp
+*.cache
+*.bak
+*.backup
+*.orig
+*~
+.cache/
+.vite/
+.parcel-cache/
+.turbo/
+
+# Test reports
+test-results/
+playwright-report/
+blob-report/
+
+# Packaged archives
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.rar
+*.7z
+
+
+*.glb
+
+.DS_Store
+
+**/.DS_Store
