@@ -1,0 +1,211 @@
+.communication-drawer {
+  position: absolute;
+  inset: 0;
+  z-index: 22;
+  pointer-events: none;
+}
+
+.communication-toggle {
+  position: absolute;
+  right: 18px;
+  top: 18px;
+  z-index: 24;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 13px;
+  border: 1px solid rgba(170, 215, 242, 0.24);
+  border-radius: 8px;
+  background: rgba(5, 20, 31, 0.88);
+  color: #eef8ff;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.32);
+  cursor: pointer;
+  pointer-events: auto;
+  backdrop-filter: blur(10px);
+}
+
+.communication-toggle span {
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.communication-toggle strong {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgba(89, 176, 217, 0.92);
+  color: #04131d;
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.communication-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 22;
+  border: 0;
+  background: rgba(0, 0, 0, 0.26);
+  pointer-events: auto;
+}
+
+.communication-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 23;
+  width: min(360px, calc(100vw - 36px));
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px;
+  border-left: 1px solid rgba(170, 215, 242, 0.22);
+  background: rgba(5, 20, 31, 0.94);
+  color: #eef8ff;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.38);
+  transform: translateX(100%);
+  transition: transform 180ms ease;
+  pointer-events: auto;
+  backdrop-filter: blur(10px);
+}
+
+.communication-drawer--open .communication-panel {
+  transform: translateX(0);
+}
+
+.communication-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.communication-header div {
+  min-width: 0;
+}
+
+.communication-header span,
+.server-notices header,
+.communication-label {
+  color: rgba(155, 204, 232, 0.86);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.communication-header strong {
+  display: block;
+  max-width: 220px;
+  overflow: hidden;
+  color: #eef8ff;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.communication-close {
+  flex: 0 0 auto;
+}
+
+.communication-section {
+  display: grid;
+  gap: 8px;
+}
+
+.communication-select,
+.communication-send {
+  width: 100%;
+}
+
+.communication-log {
+  min-height: 120px;
+  flex: 1 1 auto;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(188, 224, 246, 0.14);
+  border-radius: 8px;
+  background: rgba(1, 10, 17, 0.42);
+}
+
+.communication-empty {
+  margin: 0;
+  color: rgba(232, 245, 255, 0.5);
+  font-size: 13px;
+}
+
+.communication-message {
+  align-self: flex-start;
+  max-width: 88%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(15, 53, 79, 0.96);
+}
+
+.communication-message--self {
+  align-self: flex-end;
+  background: rgba(27, 96, 119, 0.98);
+}
+
+.communication-message span {
+  display: block;
+  margin-bottom: 4px;
+  color: rgba(155, 204, 232, 0.86);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.communication-message p,
+.server-notice {
+  margin: 0;
+  color: rgba(238, 248, 255, 0.94);
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.server-notices {
+  flex: 0 0 auto;
+  display: grid;
+  gap: 7px;
+}
+
+.server-notice {
+  padding: 7px 9px;
+  border-left: 3px solid rgba(125, 198, 239, 0.72);
+  background: rgba(10, 34, 51, 0.68);
+}
+
+.server-notice--warning {
+  border-left-color: rgba(255, 218, 142, 0.92);
+}
+
+.server-notice--error {
+  border-left-color: rgba(255, 122, 122, 0.92);
+}
+
+.communication-backdrop-enter-active,
+.communication-backdrop-leave-active {
+  transition: opacity 180ms ease;
+}
+
+.communication-backdrop-enter-from,
+.communication-backdrop-leave-to {
+  opacity: 0;
+}
+
+@media (max-width: 760px) {
+  .communication-toggle {
+    right: 12px;
+    top: 12px;
+  }
+
+  .communication-panel {
+    width: min(340px, 88vw);
+    padding: 16px;
+  }
+}

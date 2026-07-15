@@ -1,0 +1,67 @@
+.voyage-map {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 8;
+  width: 320px;
+  height: 320px;
+  overflow: hidden;
+  border: 1px solid rgba(229, 239, 241, 0.36);
+  border-radius: 6px;
+  background: #e4ddc3;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.38);
+  touch-action: none;
+  user-select: none;
+}
+
+.voyage-map--fullscreen {
+  inset: 0;
+  width: auto;
+  height: auto;
+  border: 0;
+  border-radius: 0;
+}
+
+.voyage-map__surface {
+  position: absolute;
+  inset: 0;
+  cursor: grab;
+  touch-action: none;
+}
+
+.voyage-map__surface:active {
+  cursor: grabbing;
+}
+
+.voyage-map__surface canvas {
+  width: 100%;
+  height: 100%;
+}
+
+.voyage-map__tools {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 1;
+  display: flex;
+  gap: 6px;
+}
+
+.voyage-map__tools button {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid rgba(238, 244, 241, 0.42);
+  border-radius: 6px;
+  background: rgba(8, 20, 24, 0.68);
+  color: rgba(246, 250, 246, 0.96);
+  font: 18px/1 system-ui, sans-serif;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+}
+
+.voyage-map__tools button:hover {
+  background: rgba(18, 42, 45, 0.78);
+}

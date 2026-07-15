@@ -1,0 +1,127 @@
+.bearing-compass-panel {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 10px;
+  border-top: 1px solid rgba(148, 192, 212, 0.16);
+}
+
+.bearing-gauge {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.bearing-dial {
+  position: relative;
+  width: clamp(96px, 9.5vw, 120px);
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: 50%;
+  background: rgba(4, 8, 10, 0.72);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.18),
+    0 8px 18px rgba(0, 0, 0, 0.34);
+}
+
+.bearing-dial-image,
+.hull-indicator {
+  display: block;
+  user-select: none;
+  pointer-events: none;
+}
+
+.bearing-dial-image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.hull-indicator {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 42%;
+  height: 42%;
+  object-fit: contain;
+  opacity: 0.92;
+  filter:
+    drop-shadow(0 0 2px rgba(0, 0, 0, 0.72))
+    drop-shadow(0 0 5px rgba(122, 218, 255, 0.45));
+  transform-origin: 50% 50%;
+}
+
+.periscope-relative-arrow {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 3px;
+  height: 38%;
+  border-radius: 999px;
+  background: #ffd36d;
+  box-shadow:
+    0 0 0 1px rgba(54, 34, 0, 0.45),
+    0 0 8px rgba(255, 211, 109, 0.72);
+  transform-origin: 50% 100%;
+}
+
+.periscope-relative-arrow::before {
+  position: absolute;
+  top: -7px;
+  left: 50%;
+  width: 0;
+  height: 0;
+  content: "";
+  transform: translateX(-50%);
+  border-right: 6px solid transparent;
+  border-bottom: 10px solid #ffd36d;
+  border-left: 6px solid transparent;
+  filter: drop-shadow(0 0 4px rgba(255, 211, 109, 0.68));
+}
+
+.periscope-relative-arrow::after {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  width: 11px;
+  height: 11px;
+  content: "";
+  border-radius: 50%;
+  background: #fff2bb;
+  box-shadow: 0 0 7px rgba(255, 211, 109, 0.78);
+}
+
+.bearing-readout {
+  display: flex;
+  gap: 5px;
+  align-items: baseline;
+  justify-content: center;
+  margin: 0;
+  color: #f4fbff;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.bearing-readout span {
+  color: rgba(169, 199, 214, 0.72);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+}
+
+@media (max-width: 600px) {
+  .bearing-compass-panel {
+    gap: 8px;
+    padding: 8px;
+  }
+
+  .bearing-dial {
+    width: clamp(76px, 28vw, 96px);
+  }
+
+  .bearing-readout {
+    font-size: 12px;
+  }
+}

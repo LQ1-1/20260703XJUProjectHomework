@@ -1,0 +1,113 @@
+.room-container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background:
+    radial-gradient(circle at 50% 22%, rgba(79, 150, 190, 0.35), transparent 34%),
+    linear-gradient(180deg, #071a26 0%, #03101a 58%, #01070d 100%);
+  font-family: Inter, system-ui, sans-serif;
+}
+
+.room-card {
+  width: min(900px, 100%);
+  padding: 28px;
+  border: 1px solid rgba(170, 215, 242, 0.2);
+  border-radius: 8px;
+  background: rgba(5, 20, 31, 0.86);
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.38);
+  backdrop-filter: blur(10px);
+}
+
+.room-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.room-header p {
+  margin: 0 0 8px;
+  color: rgba(155, 204, 232, 0.86);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+}
+
+.room-header h1 {
+  margin: 0;
+  color: #eef8ff;
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.room-commander {
+  min-width: 140px;
+  text-align: right;
+  color: rgba(232, 245, 255, 0.82);
+}
+
+.room-commander span,
+.room-commander strong {
+  display: block;
+}
+
+.room-commander span {
+  margin-bottom: 5px;
+  font-size: 12px;
+  color: rgba(155, 204, 232, 0.82);
+}
+
+.room-commander strong {
+  color: #eef8ff;
+  font-size: 16px;
+}
+
+.room-toolbar {
+  display: flex;
+  gap: 10px;
+  margin: 24px 0 14px;
+}
+
+.room-demo-notice {
+  margin: 0 0 12px;
+  color: rgba(255, 218, 142, 0.92);
+  font-size: 13px;
+}
+
+.room-table {
+  border: 1px solid rgba(188, 224, 246, 0.16);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.room-card .el-table {
+  --el-table-bg-color: rgba(7, 25, 38, 0.92);
+  --el-table-tr-bg-color: rgba(7, 25, 38, 0.92);
+  --el-table-header-bg-color: rgba(10, 34, 51, 0.98);
+  --el-table-header-text-color: rgba(232, 245, 255, 0.92);
+  --el-table-text-color: rgba(232, 245, 255, 0.88);
+  --el-table-border-color: rgba(188, 224, 246, 0.13);
+  --el-table-row-hover-bg-color: rgba(15, 53, 79, 0.96);
+}
+
+@media (max-width: 680px) {
+  .room-container {
+    padding: 16px;
+  }
+
+  .room-card {
+    padding: 20px;
+  }
+
+  .room-header,
+  .room-toolbar {
+    flex-direction: column;
+  }
+
+  .room-commander {
+    text-align: left;
+  }
+}
