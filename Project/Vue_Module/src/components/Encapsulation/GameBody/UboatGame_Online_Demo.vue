@@ -36,6 +36,7 @@ import {
   uploadOnlineUBoatState,
   uploadOnlineTorpedoState,
   type OnlineCargoShipStateDTO,
+  type OnlineUBoatStateDTO,
   type GameResultDTO,
   type SettlementDTO,
 } from '../api/ContactTool.ts'
@@ -46,9 +47,14 @@ import {
   getCargoStateSpeedKnots,
   getDemoInitialUBoatSpawn as getSharedDemoInitialUBoatSpawn,
   getDemoUBoatWorldPosition,
+  getUBoatStateDepth,
+  getUBoatStateHeading,
+  getUBoatStateLocation,
   getTorpedoesRemainingFromPayload,
+  isSelfUBoatState,
   normalizeArrayPayload,
   normalizeRoomPlayers,
+  normalizeUBoatStates,
   shouldRestoreRejectedTorpedo,
   updateLoadingProgressValue,
 } from './gameBodyShared.ts'
@@ -155,6 +161,7 @@ let engine: GameEngine | undefined
 let input: InputController | undefined
 let cameraCtrl: CameraController | undefined
 let submarine: SubmarineController | undefined
+let remoteSubmarines = new Map<string, SubmarineController>()
 let cargoShips: CargoShipController[] = []
 let ocean: OceanController | undefined
 let hitDetect: HitDetectSystem | undefined
@@ -173,6 +180,7 @@ let roomDetailTimer: ReturnType<typeof setInterval> | undefined
 const sunkConfirmingModels = new Set<string>()
 const activeSyncedTorpedoes = new Map<string, TorpedorController>()
 const cargoShipCreateTasks = new Map<string, Promise<CargoShipController | undefined>>()
+const remoteSubmarineCreateTasks = new Map<string, Promise<SubmarineController | undefined>>()
 const reportedHitTorpedoes = new Set<string>()
 let isDemoInitialPositionApplied = false
 
@@ -466,6 +474,104 @@ async function applyCargoLifecycle(cargoStates: OnlineCargoShipStateDTO[]) {
   }
 }
 
+function getUBoatStateModelID(uBoatState: Partial<OnlineUBoatStateDTO>): string {
+  return String(uBoatState.modelID ?? '')
+}
+
+function isOwnUBoatState(uBoatState: Partial<OnlineUBoatStateDTO>): boolean {
+  const modelID = getUBoatStateModelID(uBoatState)
+  if (submarine?.id && modelID && modelID === submarine.id) return true
+  return isSelfUBoatState(uBoatState, { selfUUID: selfUUID.value, selfUBoatID: selfUBoatID.value })
+}
+
+async function ensureRemoteSubmarine(
+  uBoatState: OnlineUBoatStateDTO,
+): Promise<SubmarineController | undefined> {
+  if (!engine || !input || !cameraCtrl || !entityRegistry) return undefined
+
+  const modelID = getUBoatStateModelID(uBoatState)
+  if (!modelID || isOwnUBoatState(uBoatState)) return undefined
+
+  const existing = remoteSubmarines.get(modelID)
+  if (existing) return existing
+
+  const creating = remoteSubmarineCreateTasks.get(modelID)
+  if (creating) return creating
+
+  const location = getUBoatStateLocation(uBoatState)
+  if (!location) return undefined
+
+  const task = SubmarineController.create(engine, input, cameraCtrl, {
+    id: modelID,
+    worldPosition: location,
+    initialHeadingDegrees: getUBoatStateHeading(uBoatState, 0),
+    initialDepthMeters: getUBoatStateDepth(uBoatState, 0),
+    isPlayerControlled: false,
+    modelUrl: submarineUrl,
+    entityRegistry,
+  })
+    .then((remoteSubmarine) => {
+      remoteSubmarines.set(modelID, remoteSubmarine)
+      hitDetect?.registerSubmarine(remoteSubmarine)
+      return remoteSubmarine
+    })
+    .catch((error) => {
+      console.warn('后端潜艇模型创建失败。', error)
+      return undefined
+    })
+    .finally(() => {
+      remoteSubmarineCreateTasks.delete(modelID)
+    })
+
+  remoteSubmarineCreateTasks.set(modelID, task)
+  return task
+}
+
+async function applyRemoteUBoatLifecycle(uBoatStates: OnlineUBoatStateDTO[]) {
+  const activeRemoteIDs = new Set<string>()
+
+  for (const uBoatState of uBoatStates) {
+    if (isOwnUBoatState(uBoatState)) continue
+
+    const modelID = getUBoatStateModelID(uBoatState)
+    if (!modelID) continue
+    activeRemoteIDs.add(modelID)
+
+    const remoteSubmarine = await ensureRemoteSubmarine(uBoatState)
+    if (!remoteSubmarine) continue
+
+    const lifecycleState = uBoatState.lifecycleState ?? 'active'
+    if ((lifecycleState === 'sinking' || lifecycleState === 'sunk') && !remoteSubmarine.isDestroyed) {
+      remoteSubmarine.isDestroyed = true
+    }
+
+    if (lifecycleState === 'active' && !remoteSubmarine.isDestroyed) {
+      const location = getUBoatStateLocation(uBoatState)
+      if (location) {
+        remoteSubmarine.root.position.x = THREE.MathUtils.lerp(remoteSubmarine.root.position.x, location.x, 0.18)
+        remoteSubmarine.root.position.z = THREE.MathUtils.lerp(remoteSubmarine.root.position.z, location.z, 0.18)
+      }
+      remoteSubmarine.heading = THREE.MathUtils.degToRad(90 - getUBoatStateHeading(uBoatState, remoteSubmarine.compassHeading))
+      remoteSubmarine.root.rotation.y = remoteSubmarine.heading
+      remoteSubmarine.currentSpeed = Number.isFinite(Number(uBoatState.speedKmh))
+        ? Number(uBoatState.speedKmh) / 3.6 / SCENE_TO_METERS
+        : 0
+      const depthScene = getUBoatStateDepth(uBoatState, remoteSubmarine.depthMeters) / SCENE_TO_METERS
+      remoteSubmarine.currentDepth = depthScene
+      remoteSubmarine.targetDepth = depthScene
+    }
+  }
+
+  if (uBoatStates.length === 0) return
+
+  for (const [modelID, remoteSubmarine] of remoteSubmarines) {
+    if (activeRemoteIDs.has(modelID)) continue
+    hitDetect?.unregister(modelID)
+    remoteSubmarine.dispose()
+    remoteSubmarines.delete(modelID)
+  }
+}
+
 function disposeCargoShip(ship: CargoShipController): void {
   engine?.removeUpdatable(ship)
   hitDetect?.unregister(ship.id)
@@ -597,7 +703,9 @@ async function createFallbackCargoShips() {
 
 async function applyWorldSyncPayload(payload: any): Promise<boolean> {
   const cargoStates = normalizeArrayPayload<OnlineCargoShipStateDTO>(payload, ['cargoShips', 'convoy'])
+  const uBoatStates = normalizeUBoatStates(payload)
   await applyCargoLifecycle(cargoStates)
+  await applyRemoteUBoatLifecycle(uBoatStates)
   applyWorldSettlement(payload)
   applyWorldGameResult(payload)
   syncTorpedoesRemaining(payload)
@@ -629,6 +737,7 @@ function stopOnlinePolling() {
   roomDetailTimer = undefined
   activeSyncedTorpedoes.clear()
   cargoShipCreateTasks.clear()
+  remoteSubmarineCreateTasks.clear()
   communicationRef.value?.stopPolling()
 }
 
@@ -936,6 +1045,9 @@ onMounted(async () => {
         for (const ship of cargoShips) {
           ship.updateHeight(oceanUpdatable.sampledWaterHeight)
         }
+        for (const remoteSubmarine of remoteSubmarines.values()) {
+          remoteSubmarine.setSampledWaterHeight(oceanUpdatable.sampledWaterHeight)
+        }
       }
       originalOceanUpdate(delta)
       // 同步更新太阳位置
@@ -975,6 +1087,8 @@ onBeforeUnmount(() => {
     hitDetect.clear()
   }
   submarine?.dispose()
+  for (const remoteSubmarine of remoteSubmarines.values()) remoteSubmarine.dispose()
+  remoteSubmarines.clear()
   for (const ship of cargoShips) ship.dispose()
   cargoShips = []
   if (sunModel) {

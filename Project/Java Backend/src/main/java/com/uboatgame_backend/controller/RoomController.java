@@ -3,7 +3,9 @@ package com.uboatgame_backend.controller;
 import com.uboatgame_backend.dto.ApiDtos.AuthUser;
 import com.uboatgame_backend.dto.ApiDtos.RoomCreateRequest;
 import com.uboatgame_backend.dto.ApiDtos.RoomIdRequest;
+import com.uboatgame_backend.dto.WsDtos.RoomWsTicketResponse;
 import com.uboatgame_backend.service.GameService;
+import com.uboatgame_backend.service.RoomTicketService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,9 +20,11 @@ public class RoomController {
     private static final Logger log = LoggerFactory.getLogger(RoomController.class);
 
     private final GameService gameService;
+    private final RoomTicketService roomTicketService;
 
-    public RoomController(GameService gameService) {
+    public RoomController(GameService gameService, RoomTicketService roomTicketService) {
         this.gameService = gameService;
+        this.roomTicketService = roomTicketService;
     }
 
     @GetMapping("/info")
@@ -61,6 +65,15 @@ public class RoomController {
                 userId(authUser),
                 body == null ? null : body.RoomID());
         return gameService.leaveRoom(authUser, body);
+    }
+
+    @PostMapping("/ws-ticket")
+    public RoomWsTicketResponse wsTicket(HttpServletRequest request, @RequestBody RoomIdRequest body) {
+        AuthUser authUser = user(request);
+        log.info("WebSocket ticket request received: kommandantUUID={}, roomID={}",
+                userId(authUser),
+                body == null ? null : body.RoomID());
+        return roomTicketService.issueTicket(authUser, body == null ? null : body.RoomID());
     }
 
     private AuthUser user(HttpServletRequest request) {

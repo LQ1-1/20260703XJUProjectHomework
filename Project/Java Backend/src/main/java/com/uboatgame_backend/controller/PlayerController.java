@@ -29,6 +29,15 @@ public class PlayerController {
         AuthUser authUser = (AuthUser) request.getAttribute(GameService.AUTH_ATTR);
         log.info("Player record request received: kommandantUUID={}",
                 authUser == null ? null : authUser.kommandantUUID());
-        return gameService.playerRecord(authUser);
+        try {
+            return gameService.playerRecord(authUser);
+        } catch (Exception ex) {
+            log.error("Player record request failed: kommandantUUID={}, errorClass={}, message={}",
+                    authUser == null ? null : authUser.kommandantUUID(),
+                    ex.getClass().getName(),
+                    ex.getMessage(),
+                    ex);
+            return GameService.fail("战绩查询失败: " + ex.getClass().getSimpleName() + ": " + ex.getMessage());
+        }
     }
 }

@@ -250,7 +250,7 @@ export class MapRender {
 
     if (layer >= 4) {
       const tileWorldSize = this.getTileWorldSize(layer)
-      const layerLocalZoom = 0.85 + (this.zoom - layer) * 0.055
+      const layerLocalZoom = 0.25 + (this.zoom - layer) * 0.05
       return (TILE_IMAGE_SIZE / tileWorldSize) * layerLocalZoom
     }
 
