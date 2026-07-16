@@ -110,6 +110,7 @@ export class HitDetectSystem implements Updatable {
   private readonly activePairs = new Set<string>()
   private readonly tempPositionA = new THREE.Vector3()
   private readonly tempPositionB = new THREE.Vector3()
+  private currentTimeSeconds = 0
 
   constructor(options: HitDetectSystemOptions = {}) {
     this.scene = options.scene
@@ -184,7 +185,7 @@ export class HitDetectSystem implements Updatable {
     }
   }
 
-  registerTorpedo(torpedo: TorpedorController, createdAtSeconds = 0): void {
+  registerTorpedo(torpedo: TorpedorController, createdAtSeconds = this.currentTimeSeconds): void {
     this.register({
       id: torpedo.id,
       type: 'torpedo',
@@ -222,6 +223,7 @@ export class HitDetectSystem implements Updatable {
 
   update(_delta: number, timeMs: number): void {
     const timeSeconds = timeMs / 1000
+    this.currentTimeSeconds = timeSeconds
     const entities = Array.from(this.entities.values()).filter((entity) =>
       this.isEntityActive(entity, timeSeconds),
     )
@@ -234,6 +236,7 @@ export class HitDetectSystem implements Updatable {
         const entityA = entities[i]
         const entityB = entities[j]
         if (!entityA || !entityB) continue
+        if (this.isOwnerTorpedoPair(entityA, entityB)) continue
         const pairKey = createPairKey(entityA.id, entityB.id)
 
         if (!this.passesRoughCheck(entityA, entityB)) continue
@@ -268,6 +271,18 @@ export class HitDetectSystem implements Updatable {
       return false
     }
     return true
+  }
+
+  private isOwnerTorpedoPair(
+    entityA: RegisteredCollisionEntity,
+    entityB: RegisteredCollisionEntity,
+  ): boolean {
+    const torpedoEntity = entityA.type === 'torpedo' ? entityA : entityB.type === 'torpedo' ? entityB : undefined
+    const otherEntity = torpedoEntity === entityA ? entityB : entityA
+    if (!torpedoEntity || otherEntity.type !== 'submarine') return false
+
+    const torpedo = torpedoEntity.controller as TorpedorController
+    return torpedo.ownerId === otherEntity.id
   }
 
   private passesRoughCheck(

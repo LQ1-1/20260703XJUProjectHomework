@@ -246,6 +246,7 @@ export interface SettlementDTO {
     RoomID: string
     KommandantUUID: string
     cargoShipsSunk: number
+    uBoatsSunk: number
     totalTonnage: number
 }
 
@@ -256,6 +257,30 @@ export interface GameResultDTO {
     cargoShipsSunk: number
     totalCargoShips: number
     sunkRatio: number
+}
+
+export interface PlayerRecordSummaryDTO {
+    cargoShipsSunk: number
+    uBoatsSunk: number
+    totalTonnage: number
+    gamesPlayed: number
+}
+
+export interface PlayerGameRecordDTO {
+    RoomID: string
+    state?: 'playing' | 'victory' | 'defeat'
+    reason?: 'cargo_sunk_threshold' | 'cargo_arrived' | 'torpedoes_depleted' | 'all_uboats_sunk'
+    cargoShipsSunk: number
+    uBoatsSunk: number
+    totalTonnage: number
+    roomCargoShipsSunk: number
+    totalCargoShips: number
+    updatedAt?: string
+}
+
+export interface PlayerRecordDTO {
+    summary: PlayerRecordSummaryDTO
+    games: PlayerGameRecordDTO[]
 }
 
 
@@ -434,6 +459,10 @@ export async function createRoom(param: RoomCreateDTO){
 
 export async function getRoomDetail(RoomID: string){
     return await request.get('/room/detail', { params: { RoomID } })
+}
+
+export async function getPlayerRecord(){
+    return await request.get('/player/record')
 }
 
 export async function leaveRoom(param: RoomLeaveDTO){

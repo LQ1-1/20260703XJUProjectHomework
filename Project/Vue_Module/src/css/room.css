@@ -1,4 +1,5 @@
 .room-container {
+  position: relative;
   min-height: 100vh;
   display: flex;
   align-items: center;
@@ -8,6 +9,13 @@
     radial-gradient(circle at 50% 22%, rgba(79, 150, 190, 0.35), transparent 34%),
     linear-gradient(180deg, #071a26 0%, #03101a 58%, #01070d 100%);
   font-family: Inter, system-ui, sans-serif;
+}
+
+.room-record-button {
+  position: fixed;
+  top: 24px;
+  right: 24px;
+  z-index: 20;
 }
 
 .room-card {
@@ -93,9 +101,68 @@
   --el-table-row-hover-bg-color: rgba(15, 53, 79, 0.96);
 }
 
+.player-record,
+.room-detail {
+  min-height: 180px;
+}
+
+.player-record-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.player-record-summary div {
+  padding: 14px;
+  border: 1px solid rgba(31, 58, 78, 0.14);
+  border-radius: 8px;
+  background: #f6f9fb;
+}
+
+.player-record-summary span,
+.player-record-summary strong,
+.room-detail-count span,
+.room-detail-count strong {
+  display: block;
+}
+
+.player-record-summary span,
+.room-detail-count span {
+  margin-bottom: 8px;
+  color: #5f6f7a;
+  font-size: 13px;
+}
+
+.player-record-summary strong,
+.room-detail-count strong {
+  color: #132b3c;
+  font-size: 22px;
+  line-height: 1.2;
+}
+
+.player-record-table,
+.room-detail-table {
+  width: 100%;
+}
+
+.room-detail-count {
+  margin-bottom: 16px;
+  padding: 14px;
+  border: 1px solid rgba(31, 58, 78, 0.14);
+  border-radius: 8px;
+  background: #f6f9fb;
+}
+
 @media (max-width: 680px) {
   .room-container {
     padding: 16px;
+    padding-top: 72px;
+  }
+
+  .room-record-button {
+    top: 16px;
+    right: 16px;
   }
 
   .room-card {
@@ -109,5 +176,9 @@
 
   .room-commander {
     text-align: left;
+  }
+
+  .player-record-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

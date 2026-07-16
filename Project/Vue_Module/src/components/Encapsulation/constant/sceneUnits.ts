@@ -29,7 +29,7 @@ export const MAX_DEPTH_SCENE = MAX_DEPTH_METERS * METERS_TO_SCENE
 export const SURFACE_DEPTH_EPSILON_SCENE = 0.02
 
 /** 货船,潜艇被击沉后要下沉到 该深度 */
-export const SINK_DEPTH = 1200
+export const SINK_DEPTH = 80
 
 // -------------------- 垂直速度 --------------------
 

@@ -4,7 +4,6 @@ import { useRoute, useRouter } from 'vue-router'
 import PlayAudio from '@/common/audiotool/PlayAudio.ts'
 import '../../../css/mode.css'
 
-
 const router = useRouter()
 const route = useRoute()
 const hasEnteredModeSelect = ref(false)
@@ -28,6 +27,16 @@ function enterOnlineMode() {
   router.push({
     name: 'Login',
     query: route.query,
+  })
+}
+
+function enterOnlineDemoMode() {
+  router.push({
+    name: 'Login',
+    query: {
+      ...route.query,
+      mode: 'online-demo',
+    },
   })
 }
 
@@ -58,6 +67,11 @@ function enterOfflineMode() {
         <button class="mode-option mode-option--online" type="button" @click="enterOnlineMode">
           <span>ONLINE</span>
           <strong>联机模式</strong>
+        </button>
+
+        <button class="mode-option mode-option--demo" type="button" @click="enterOnlineDemoMode">
+          <span>DEMO</span>
+          <strong>演示模式</strong>
         </button>
 
         <button class="mode-option mode-option--offline" type="button" @click="enterOfflineMode">

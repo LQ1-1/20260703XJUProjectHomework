@@ -112,6 +112,10 @@ export class RangeComputer {
 }
 
 
+let testCase = new TorpedoFireControlComputerParameter(78, 1590, 7 ,30);
+console.log(`拦截角度：${testCase.getInterceptAngel()}; 需要时间：${testCase.getTime()}, 鱼雷航行距离：${testCase.getTorpedorDistance()}`)
+
+
 /*
 
 目标距离的计算方法:

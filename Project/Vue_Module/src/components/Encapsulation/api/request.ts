@@ -22,10 +22,21 @@ request.interceptors.request.use(
 request.interceptors.response.use(
     (res)=> res.data, 
     (error) =>{
-        console.error(`请求失败: ${error.message}`)
+        console.error('请求失败详情', {
+            message: error?.message,
+            code: error?.code,
+            status: error?.response?.status,
+            statusText: error?.response?.statusText,
+            url: error?.config?.url,
+            baseURL: error?.config?.baseURL,
+            method: error?.config?.method,
+            params: error?.config?.params,
+            data: error?.config?.data,
+            responseData: error?.response?.data,
+            stack: error?.stack,
+        })
         return Promise.reject(error)
     }
 )
 
 export default request
-

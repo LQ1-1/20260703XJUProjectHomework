@@ -1,4 +1,5 @@
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import PlayAudio from '../audiotool/PlayAudio'
 
 export const SECOND_POINTER_SCALE = 1
 export const MINUTE_POINTER_SCALE = 0.48
@@ -11,6 +12,9 @@ const BUTTON_NOISE_CUTOFF_Y = 380
 const SINGLE_CLICK_DELAY_MS = 220
 const SECONDS_PER_FULL_TURN = 60
 const MINUTES_PER_FULL_TURN = 60
+
+const playMechanicalSoundEffect = ref(false)
+const playAudio = new PlayAudio('/assets/audio/TickdaTickda.wav', 20)
 
 type ImagePoint = {
   x: number
@@ -157,10 +161,12 @@ export const useMechanicalStopwatch = () => {
   const toggle = () => {
     if (isRunning.value) {
       stop()
+      playMechanicalSoundEffect.value = false
       return
     }
 
     start()
+    playMechanicalSoundEffect.value = true
   }
 
   const reset = () => {
@@ -245,9 +251,23 @@ export const useMechanicalStopwatch = () => {
     reset()
   }
 
+
+
   onMounted(async () => {
     animationFrameId = window.requestAnimationFrame(updateFrame)
     buttonMask = await loadAlphaMask(mechanicalStopwatchAssets.buttonMask)
+
+    watch(playMechanicalSoundEffect, (isPlaying) => {
+      if (isPlaying) {
+        void (async () => {
+          while (playMechanicalSoundEffect.value) {
+            await playAudio.play()
+          }
+        })()
+      } else {
+        playAudio.stop()
+      }
+    })
   })
 
   onBeforeUnmount(() => {

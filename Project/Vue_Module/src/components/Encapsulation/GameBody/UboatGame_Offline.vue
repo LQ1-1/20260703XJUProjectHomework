@@ -31,6 +31,10 @@ import { v4 as uuidv4 } from 'uuid'
 import { ExplosionSplashEffect } from '../ExplosionSplashEffect/explosionSplashEffect.ts'
 import { GameEntityRegistry } from '../entitymanager/GameEntityRegistry.ts'
 import type { TorpedoLaunchPlan } from '../torpedor/torpedoTypes.ts'
+import {
+  createMapBoundedRadialPosition,
+  updateLoadingProgressValue,
+} from './gameBodyShared.ts'
 
 const submarineUrl = '/assets/model/type_vii_d_u-boat.glb'
 const cargoshipUrl = '/assets/model/liberty_ship.glb'
@@ -157,17 +161,8 @@ let entityRegistry: GameEntityRegistry | undefined
 
 
 function updateLoadingProgress(url: string, event: ProgressEvent<EventTarget>) {
-  fileProgress.set(url, {
-    loaded: event.loaded,
-    total: event.lengthComputable ? event.total : event.loaded,
-  })
-  let loaded = 0
-  let total = 0
-  for (const p of fileProgress.values()) {
-    loaded += p.loaded
-    total += p.total
-  }
-  if (total > 0) loadingProgress.value = Math.min(99, (loaded / total) * 100)
+  const nextProgress = updateLoadingProgressValue(fileProgress, url, event)
+  if (nextProgress !== undefined) loadingProgress.value = nextProgress
 }
 
 // -------------------- 限制提示 --------------------
@@ -284,14 +279,14 @@ function createRandomConvoyPlan(): ConvoyPlan {
 }
 
 function createInitialSubmarinePosition(convoyCenter: THREE.Vector3): { x: number; z: number } {
-  for (let attempt = 0; attempt < 40; attempt += 1) {
-    const angle = randomBetween(0, Math.PI * 2)
-    const distance = INITIAL_SUBMARINE_DISTANCE
-    const x = clampToMap(convoyCenter.x + Math.cos(angle) * distance)
-    const z = clampToMap(convoyCenter.z + Math.sin(angle) * distance)
-    const actualDistance = Math.hypot(x - convoyCenter.x, z - convoyCenter.z)
-    if (Math.abs(actualDistance - INITIAL_SUBMARINE_DISTANCE) <= 1) return { x, z }
-  }
+  const position = createMapBoundedRadialPosition(
+    { x: convoyCenter.x, z: convoyCenter.z },
+    INITIAL_SUBMARINE_DISTANCE,
+    { min: MAP_MIN, max: MAP_MAX },
+    40,
+  )
+
+  if (position) return position
 
   const fallbackX = convoyCenter.x < MAP_MAX / 2
     ? convoyCenter.x + INITIAL_SUBMARINE_DISTANCE

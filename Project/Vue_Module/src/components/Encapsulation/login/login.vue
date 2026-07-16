@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
-import {useRouter} from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import type { FormInstance, FormRules } from 'element-plus'
 import {
     UserFilled,
@@ -11,6 +11,7 @@ import '../../../css/login.css'
 
 
 const router = useRouter()
+const route = useRoute()
 
 
 const KommandantRegistrationForm = reactive(new UBoatKommandant('', '', ''))    //注册Kommandant编号的表单
@@ -123,7 +124,7 @@ async function handleSubmit() {
                 }
                 if (data.KommandantName) localStorage.setItem('KommandantName', data.KommandantName)
                 if (data.UBoatID) localStorage.setItem('UBoatID', data.UBoatID)
-                await router.push({ name: 'Room' })
+                await router.push({ name: 'Room', query: route.query })
             }else{
                 alert(data.message)
             }

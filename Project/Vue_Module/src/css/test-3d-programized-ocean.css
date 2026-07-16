@@ -244,6 +244,11 @@
   font-weight: 800;
 }
 
+.settlement-panel__text {
+  font-size: 16px;
+  line-height: 1.35;
+}
+
 .hint-enter-active,
 .hint-leave-active,
 .notice-enter-active,

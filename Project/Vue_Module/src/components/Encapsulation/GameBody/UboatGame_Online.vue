@@ -14,7 +14,7 @@ import {
 import { CargoShipController } from '../cargoship/CargoShipController.ts'
 import { OceanController } from '../ocean/OceanController.ts'
 import { tuneSunMaterials, disposeObject } from '../modules/modelUtils.ts'
-import { HitDetectSystem } from '../modules/hitdetect.ts'
+import { HitDetectSystem, type CollisionEvent } from '../modules/hitdetect.ts'
 import UnderwaterStatusPanel from '../panel/UnderwaterStatusPanel.vue'
 import TopRightPanel from '../panel/TopRightPanel.vue'
 import {
@@ -32,13 +32,25 @@ import {
   getRoomDetail,
   getWorldSync,
   leaveRoom,
+  reportModelHit,
   uploadOnlineUBoatState,
   uploadOnlineTorpedoState,
   type OnlineCargoShipStateDTO,
-  type OnlineUBoatStateDTO,
   type GameResultDTO,
   type SettlementDTO,
 } from '../api/ContactTool.ts'
+import {
+  getCargoStateHeading,
+  getCargoStateLocation,
+  getCargoStateModelID,
+  getCargoStateSpeedKnots,
+  getInitialUBoatSpawn as getSharedInitialUBoatSpawn,
+  getTorpedoesRemainingFromPayload,
+  normalizeArrayPayload,
+  normalizeRoomPlayers,
+  shouldRestoreRejectedTorpedo,
+  updateLoadingProgressValue,
+} from './gameBodyShared.ts'
 
 import '../../../css/test-3d-programized-ocean.css'
 
@@ -110,6 +122,7 @@ const selfUBoatID = ref(localStorage.getItem('UBoatID') ?? '')
 const onlinePlayers = ref<OnlineRoomPlayer[]>([])
 const worldRevision = ref('')
 const settlement = ref<SettlementDTO | null>(null)
+const isSelfSunk = ref(false)
 const gameResult = ref<GameResultDTO | null>(null)
 const isLeavingRoom = ref(false)
 const ownUBoatModelID = ref('')
@@ -131,6 +144,7 @@ const showUnderwaterStatus = computed(() => true)
 const showUnderwaterScreen = computed(
   () => depthMeters.value > UNDERWATER_UI_DEPTH_METERS && !isAimingViewActive.value,
 )
+const finalGameResult = computed(() => gameResult.value && gameResult.value.state !== 'playing' ? gameResult.value : null)
 
 // -------------------- 非响应式引用 --------------------
 let engine: GameEngine | undefined
@@ -155,6 +169,7 @@ let roomDetailTimer: ReturnType<typeof setInterval> | undefined
 const sunkConfirmingModels = new Set<string>()
 const activeSyncedTorpedoes = new Map<string, TorpedorController>()
 const cargoShipCreateTasks = new Map<string, Promise<CargoShipController | undefined>>()
+const reportedHitTorpedoes = new Set<string>()
 
 // -------------------- 面板引用 --------------------
 const statusPanelRef = ref<InstanceType<typeof UnderwaterStatusPanel> | null>(null)
@@ -165,65 +180,6 @@ const fileProgress = new Map<string, { loaded: number; total: number }>()
 
 // -------------------- 模型管理器 -------------------//
 let entityRegistry: GameEntityRegistry | undefined
-
-function normalizeArrayPayload<T>(payload: any, keys: string[]): T[] {
-  for (const key of keys) {
-    const value = payload?.[key] ?? payload?.data?.[key]
-    if (Array.isArray(value)) return value
-  }
-  if (Array.isArray(payload?.data)) return payload.data
-  if (Array.isArray(payload)) return payload
-  return []
-}
-
-function normalizeRoomPlayers(payload: any): OnlineRoomPlayer[] {
-  const players = payload?.room?.players ?? payload?.data?.room?.players ?? payload?.players ?? payload?.data?.players
-  if (Array.isArray(players)) return players
-  return []
-}
-
-function normalizeUBoatStates(payload: any): OnlineUBoatStateDTO[] {
-  const states = normalizeArrayPayload<OnlineUBoatStateDTO>(payload, ['uBoats', 'wolfpack'])
-  const selfUBoat = payload?.selfUBoat ?? payload?.data?.selfUBoat
-  if (selfUBoat) {
-    states.unshift(selfUBoat)
-  }
-  return states
-}
-
-function isSelfUBoatState(state: Partial<OnlineUBoatStateDTO>): boolean {
-  const kommandantUUID = String(state.KommandantUUID ?? '')
-  const uBoatID = String(state.UBoatID ?? '')
-
-  if (selfUUID.value && kommandantUUID && kommandantUUID === selfUUID.value) return true
-  if (selfUBoatID.value && uBoatID && uBoatID === selfUBoatID.value) return true
-  return false
-}
-
-function findSelfUBoatState(payload: any): OnlineUBoatStateDTO | undefined {
-  const selfUBoat = payload?.selfUBoat ?? payload?.data?.selfUBoat
-  if (selfUBoat && (!selfUBoat.KommandantUUID || isSelfUBoatState(selfUBoat))) {
-    return selfUBoat
-  }
-  return normalizeUBoatStates(payload).find(isSelfUBoatState)
-}
-
-function getUBoatStateLocation(state: Partial<OnlineUBoatStateDTO>): { x: number; z: number } | undefined {
-  const x = Number(state.location?.x ?? (state as any).x)
-  const z = Number(state.location?.z ?? (state as any).z)
-  if (!Number.isFinite(x) || !Number.isFinite(z)) return undefined
-  return { x, z }
-}
-
-function getUBoatStateHeading(state: Partial<OnlineUBoatStateDTO>): number {
-  const heading = Number(state.headingDegrees)
-  return Number.isFinite(heading) ? heading : FALLBACK_U_BOAT_SPAWN.headingDegrees
-}
-
-function getUBoatStateDepth(state: Partial<OnlineUBoatStateDTO>): number {
-  const depth = Number(state.depthMeters ?? (state as any).depth)
-  return Number.isFinite(depth) ? depth : FALLBACK_U_BOAT_SPAWN.depthMeters
-}
 
 async function fetchWorldSyncPayload(): Promise<any | undefined> {
   if (!roomId.value) return undefined
@@ -242,17 +198,11 @@ function getInitialUBoatSpawn(payload: any): {
   initialDepthMeters: number
   torpedoesRemaining?: number
 } {
-  const state = findSelfUBoatState(payload)
-  const location = state ? getUBoatStateLocation(state) : undefined
-  const torpedoesRemaining = Number(state?.torpedoesRemaining)
-
-  return {
-    id: String(state?.modelID ?? '') || uuidv4(),
-    worldPosition: location ?? FALLBACK_U_BOAT_SPAWN.location,
-    initialHeadingDegrees: state ? getUBoatStateHeading(state) : FALLBACK_U_BOAT_SPAWN.headingDegrees,
-    initialDepthMeters: state ? getUBoatStateDepth(state) : FALLBACK_U_BOAT_SPAWN.depthMeters,
-    torpedoesRemaining: Number.isFinite(torpedoesRemaining) ? Math.max(0, torpedoesRemaining) : undefined,
-  }
+  return getSharedInitialUBoatSpawn(
+    payload,
+    { selfUUID: selfUUID.value, selfUBoatID: selfUBoatID.value },
+    FALLBACK_U_BOAT_SPAWN,
+  )
 }
 
 async function pollRoomDetail() {
@@ -293,7 +243,7 @@ async function pollRoomDetail() {
 }
 
 async function uploadSelfState() {
-  if (!roomId.value || !submarine || settlement.value) return
+  if (!roomId.value || !submarine || isSelfSunk.value) return
 
   try {
     const result: any = await uploadOnlineUBoatState({
@@ -323,28 +273,23 @@ async function uploadSelfState() {
 }
 
 function syncTorpedoesRemaining(payload: any): void {
-  const value =
-    payload?.torpedoesRemaining ??
-    payload?.data?.torpedoesRemaining ??
-    payload?.selfUBoat?.torpedoesRemaining ??
-    payload?.data?.selfUBoat?.torpedoesRemaining
-  if (!Number.isFinite(Number(value))) return
+  const nextRemaining = getTorpedoesRemainingFromPayload(payload)
+  if (nextRemaining === undefined) return
 
-  const nextRemaining = Math.max(0, Number(value))
   remainingTorpedoes.value = nextRemaining
   submarine?.setTorpedorCount(nextRemaining)
 }
 
-function isTorpedoInsufficientResponse(payload: any): boolean {
-  const message = String(payload?.message ?? payload?.data?.message ?? '').toLowerCase()
-  const reason = String(payload?.reason ?? payload?.data?.reason ?? '').toLowerCase()
-  const code = String(payload?.code ?? payload?.data?.code ?? '').toLowerCase()
-  const text = `${message} ${reason} ${code}`
-  return text.includes('torpedo') || text.includes('鱼雷不足') || text.includes('no torpedo')
+function restoreRejectedTorpedo(torpedo: TorpedorController): void {
+  activeSyncedTorpedoes.delete(torpedo.id)
+  torpedo.dispose()
+  const restoredRemaining = remainingTorpedoes.value + 1
+  remainingTorpedoes.value = restoredRemaining
+  submarine?.setTorpedorCount(restoredRemaining)
 }
 
 async function uploadTorpedoState(torpedo: TorpedorController, removeIfRejected = false): Promise<boolean> {
-  if (!roomId.value || !submarine || settlement.value || torpedo.isExpired) {
+  if (!roomId.value || !submarine || isSelfSunk.value || torpedo.isExpired) {
     activeSyncedTorpedoes.delete(torpedo.id)
     return false
   }
@@ -366,16 +311,19 @@ async function uploadTorpedoState(torpedo: TorpedorController, removeIfRejected 
       },
     })
     syncTorpedoesRemaining(result)
+    applyWorldGameResult(result)
 
-    if (removeIfRejected && isTorpedoInsufficientResponse(result)) {
-      activeSyncedTorpedoes.delete(torpedo.id)
-      torpedo.dispose()
-      showLimitNotice(String(result?.message ?? result?.data?.message ?? '鱼雷不足'))
+    if (removeIfRejected && shouldRestoreRejectedTorpedo(result)) {
+      restoreRejectedTorpedo(torpedo)
       return false
     }
     return true
   } catch (error: any) {
     console.warn('鱼雷状态上传失败。', error)
+    if (removeIfRejected) {
+      restoreRejectedTorpedo(torpedo)
+      return false
+    }
     return true
   }
 }
@@ -386,26 +334,40 @@ function uploadActiveTorpedoes(): void {
   }
 }
 
-function getCargoStateModelID(cargoState: Partial<OnlineCargoShipStateDTO>): string {
-  return String(cargoState.modelID ?? '')
+function handleOnlineCollision(event: CollisionEvent): void {
+  const torpedoEntity = event.a.type === 'torpedo' ? event.a : event.b.type === 'torpedo' ? event.b : undefined
+  const targetEntity = event.a === torpedoEntity ? event.b : event.a
+  if (!torpedoEntity || (targetEntity.type !== 'cargoShip' && targetEntity.type !== 'submarine')) return
+
+  const torpedo = torpedoEntity.controller as TorpedorController
+  if (!submarine || torpedo.ownerId !== submarine.id || reportedHitTorpedoes.has(torpedo.id)) return
+  if (targetEntity.type === 'submarine' && targetEntity.id === torpedo.ownerId) return
+
+  reportedHitTorpedoes.add(torpedo.id)
+  activeSyncedTorpedoes.delete(torpedo.id)
+  void reportOnlineTorpedoHit(torpedo, targetEntity.id, targetEntity.type === 'cargoShip' ? 'cargoShip' : 'uBoat')
 }
 
-function getCargoStateHeading(cargoState: Partial<OnlineCargoShipStateDTO>): number {
-  const heading = Number(cargoState.headingDegrees)
-  return Number.isFinite(heading) ? heading : 0
-}
+async function reportOnlineTorpedoHit(
+  torpedo: TorpedorController,
+  targetModelID: string,
+  targetType: 'cargoShip' | 'uBoat',
+): Promise<void> {
+  if (!roomId.value || !submarine) return
 
-function getCargoStateSpeedKnots(cargoState: Partial<OnlineCargoShipStateDTO>): number {
-  const speed = Number((cargoState as any).speedKnots ?? (cargoState as any).speed ?? 0)
-  return Number.isFinite(speed) ? speed : 0
-}
-
-function getCargoStateLocation(cargoState: Partial<OnlineCargoShipStateDTO>): { x: number; z: number } {
-  const x = Number(cargoState.location?.x ?? (cargoState as any).x)
-  const z = Number(cargoState.location?.z ?? (cargoState as any).z)
-  return {
-    x: Number.isFinite(x) ? x : 0,
-    z: Number.isFinite(z) ? z : 0,
+  try {
+    const result: any = await reportModelHit({
+      RoomID: roomId.value,
+      attackerModelID: torpedo.ownerId ?? submarine.id,
+      targetModelID,
+      targetType,
+      torpedoModelID: torpedo.id,
+      hitTime: new Date().toISOString(),
+    })
+    applyWorldGameResult(result)
+  } catch (error) {
+    console.warn('鱼雷命中上报失败。', error)
+    reportedHitTorpedoes.delete(torpedo.id)
   }
 }
 
@@ -478,6 +440,19 @@ async function applyCargoLifecycle(cargoStates: OnlineCargoShipStateDTO[]) {
   }
 }
 
+function disposeCargoShip(ship: CargoShipController): void {
+  engine?.removeUpdatable(ship)
+  hitDetect?.unregister(ship.id)
+  ship.dispose()
+}
+
+function removeCargoShipById(modelID: string): void {
+  const ship = cargoShips.find((item) => item.id === modelID)
+  if (!ship) return
+  disposeCargoShip(ship)
+  cargoShips = cargoShips.filter((item) => item.id !== modelID)
+}
+
 async function confirmSunkModels() {
   if (!roomId.value) return
 
@@ -499,6 +474,9 @@ async function confirmSunkModels() {
         modelType: candidate.type,
         sunkAt: new Date().toISOString(),
       })
+      if (candidate.type === 'cargoShip') {
+        removeCargoShipById(candidate.id)
+      }
     } catch (error) {
       sunkConfirmingModels.delete(candidate.id)
       console.warn('沉底确认上报失败。', error)
@@ -513,6 +491,7 @@ function applyWorldSettlement(payload: any) {
     RoomID: nextSettlement.RoomID ?? roomId.value,
     KommandantUUID: nextSettlement.KommandantUUID ?? selfUUID.value,
     cargoShipsSunk: Number(nextSettlement.cargoShipsSunk ?? 0),
+    uBoatsSunk: Number(nextSettlement.uBoatsSunk ?? nextSettlement.u_boats_sunk ?? 0),
     totalTonnage: Number(nextSettlement.totalTonnage ?? 0),
   }
 }
@@ -529,6 +508,20 @@ function applyWorldGameResult(payload: any) {
     totalCargoShips: Number(nextGameResult.totalCargoShips ?? 0),
     sunkRatio: Number(nextGameResult.sunkRatio ?? 0),
   }
+}
+
+function getGameResultTitle(result: GameResultDTO): string {
+  return result.state === 'victory' ? '任务完成' : '任务失败'
+}
+
+function getGameResultReason(result: GameResultDTO): string {
+  const reasonLabels: Record<string, string> = {
+    cargo_sunk_threshold: '目标吨位已达成',
+    cargo_arrived: '商船队已抵达',
+    torpedoes_depleted: '全部潜艇鱼雷耗尽',
+    all_uboats_sunk: '所有潜艇沉没',
+  }
+  return result.reason ? reasonLabels[result.reason] ?? result.reason : '战局已结束'
 }
 
 async function pollWorldSync(): Promise<boolean> {
@@ -637,17 +630,8 @@ function sendLeaveBeacon() {
 
 
 function updateLoadingProgress(url: string, event: ProgressEvent<EventTarget>) {
-  fileProgress.set(url, {
-    loaded: event.loaded,
-    total: event.lengthComputable ? event.total : event.loaded,
-  })
-  let loaded = 0
-  let total = 0
-  for (const p of fileProgress.values()) {
-    loaded += p.loaded
-    total += p.total
-  }
-  if (total > 0) loadingProgress.value = Math.min(99, (loaded / total) * 100)
+  const nextProgress = updateLoadingProgressValue(fileProgress, url, event)
+  if (nextProgress !== undefined) loadingProgress.value = nextProgress
 }
 
 // -------------------- 限制提示 --------------------
@@ -855,6 +839,7 @@ onMounted(async () => {
 
     // HUD 回调
     submarine.onHudUpdate = (data) => {
+      isSelfSunk.value = Boolean(submarine?.isSink)
       speedKmh.value = data.speedKmh
       depthMeters.value = data.depthMeters
       headingDegrees.value = data.headingDegrees
@@ -873,6 +858,7 @@ onMounted(async () => {
 
     //注册碰撞检测
     hitDetect = new HitDetectSystem({ scene: engine.scene })
+    hitDetect.onCollision = handleOnlineCollision
     hitDetect.registerSubmarine(submarine)
     engine.addUpdatable(hitDetect)
 
@@ -891,11 +877,6 @@ onMounted(async () => {
           countFButtonDown++
           if (countFButtonDown % 2 === 1) {
             submarine.currentDepth
-            let playAudio = new PlayAudio('/assets/audio/AufSehrohrtiefegehen.wav', 2)
-            playAudio.play()
-
-            let playAudio2 = new PlayAudio('/assets/audio/BootSteuertSehrohrtiefe.wav', 2)
-            playAudio2.play()
 
 
             void (async () => {
@@ -1011,8 +992,8 @@ onBeforeUnmount(() => {
     <TopRightPanel v-if="isLoaded" :is-alarm-active="isAlarmActive" :alarm-remaining-seconds="alarmRemainingSeconds"
       @alarm="handleAlarm" />
 
-    <CommunicationPanel ref="communicationRef" v-if="isLoaded && !settlement" :room-id="roomId" :players="onlinePlayers"
-      :self-uuid="selfUUID" />
+    <CommunicationPanel ref="communicationRef" v-if="isLoaded && !isSelfSunk && !finalGameResult" :room-id="roomId"
+      :players="onlinePlayers" :self-uuid="selfUUID" />
 
     <!-- 潜望镜/水面瞄准叠加层 -->
     <div v-if="isLoaded && isAimingViewActive" class="periscope-view" :aria-label="navigationState"
@@ -1047,7 +1028,7 @@ onBeforeUnmount(() => {
       <p v-if="limitNotice" class="limit-notice" role="status">{{ limitNotice }}</p>
     </Transition>
 
-    <div v-if="settlement" class="settlement-overlay" role="dialog" aria-modal="true" aria-label="本艇已被击沉">
+    <div v-if="isSelfSunk && settlement" class="settlement-overlay" role="dialog" aria-modal="true" aria-label="本艇已被击沉">
       <section class="settlement-panel">
         <p>本艇已被击沉</p>
         <h2>本次游戏结算</h2>
@@ -1057,8 +1038,32 @@ onBeforeUnmount(() => {
             <dd>{{ settlement.cargoShipsSunk }}</dd>
           </div>
           <div>
+            <dt>击沉潜艇数量</dt>
+            <dd>{{ settlement.uBoatsSunk }}</dd>
+          </div>
+          <div>
             <dt>总吨位数</dt>
             <dd>{{ settlement.totalTonnage }}</dd>
+          </div>
+        </dl>
+        <el-button type="primary" :loading="isLeavingRoom" @click="leaveCurrentRoom">
+          退出房间
+        </el-button>
+      </section>
+    </div>
+
+    <div v-if="finalGameResult" class="settlement-overlay" role="dialog" aria-modal="true" aria-label="战局结束">
+      <section class="settlement-panel">
+        <p>战局结束</p>
+        <h2>{{ getGameResultTitle(finalGameResult) }}</h2>
+        <dl>
+          <div>
+            <dt>结束原因</dt>
+            <dd class="settlement-panel__text">{{ getGameResultReason(finalGameResult) }}</dd>
+          </div>
+          <div>
+            <dt>击沉货船</dt>
+            <dd>{{ finalGameResult.cargoShipsSunk }} / {{ finalGameResult.totalCargoShips }}</dd>
           </div>
         </dl>
         <el-button type="primary" :loading="isLeavingRoom" @click="leaveCurrentRoom">
