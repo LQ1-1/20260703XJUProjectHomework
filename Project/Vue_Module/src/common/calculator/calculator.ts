@@ -88,6 +88,25 @@ export class TorpedoFireControlComputerParameter {
 
 }
 
+export class AOBComputer {
+    public targetRealHeading?: number
+    public ownShipRealHeading?: number
+    public targetRelativeBearingDial?: number
+
+    constructor(targetRealHeading?: number, ownShipRealHeading?: number, targetRelativeBearingDial?: number) {
+        this.targetRealHeading = targetRealHeading
+        this.ownShipRealHeading = ownShipRealHeading
+        this.targetRelativeBearingDial = targetRelativeBearingDial
+    }
+
+    getAOB() {
+        const tRH = this.targetRealHeading ?? 0
+        const oSRH = this.ownShipRealHeading ?? 0
+        const tRBD = this.targetRelativeBearingDial ?? 0
+        return 180.0 - tRH + oSRH + tRBD
+    }
+}
+
 export class RangeComputer {
     public MilReading: number;
     public TargetRealHight: number;
@@ -112,8 +131,8 @@ export class RangeComputer {
 }
 
 
-let testCase = new TorpedoFireControlComputerParameter(78, 1590, 7 ,30);
-console.log(`拦截角度：${testCase.getInterceptAngel()}; 需要时间：${testCase.getTime()}, 鱼雷航行距离：${testCase.getTorpedorDistance()}`)
+// let testCase = new TorpedoFireControlComputerParameter(78, 1590, 7, 30);
+// console.log(`拦截角度：${testCase.getInterceptAngel()}; 需要时间：${testCase.getTime()}, 鱼雷航行距离：${testCase.getTorpedorDistance()}`)
 
 
 /*
@@ -140,7 +159,8 @@ AOB = 180 - 目标航向+自身航向+目标方位（相对艇艏方位）
 右舷：0～180
 左舷：-180到0
 带符号AOB =(((360 + 自身航向 + 目标方位（相对艇艏方位） - 目标航向) % 360 + 360) % 360) - 180
-
+潜艇在目标的右舷AOB就是正的
+潜艇在目标左舷AOB就是负的
 
 
 提前量的正负和AOB角有关，

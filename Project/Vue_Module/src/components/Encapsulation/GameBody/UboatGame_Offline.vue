@@ -24,6 +24,7 @@ import {
 } from '../modules/navigationMath.ts'
 import VoyageMap from '../../../common/map/VoyageMap.vue'
 import PlayAudio from '../../../common/audiotool/PlayAudio.ts'
+import { MapCode } from '../../../common/map/mapcode.ts'
 
 import '../../../css/test-3d-programized-ocean.css'
 
@@ -329,6 +330,8 @@ async function spawnConvoy(plan = createRandomConvoyPlan()): Promise<void> {
       }),
     ))
 
+
+
     if (isOfflineGameDisposed || !engine || !entityRegistry) {
       for (const ship of nextShips) ship.dispose()
       return
@@ -343,7 +346,15 @@ async function spawnConvoy(plan = createRandomConvoyPlan()): Promise<void> {
       hitDetect?.registerCargoShip(ship)
     }
 
-    showLimitNotice('新的目标船队已出现')
+    if (nextShips[0]) {
+      const leadShip = nextShips[0]
+      const { x, z } = leadShip.root.position
+      const mapCode = new MapCode(x, z).getLocationCode()
+      const info = `新的目标船队已出现, Heading: ${plan.headingDegrees.toFixed(1)}, Position: ${mapCode}`
+      console.log(info)
+      showLimitNotice(info)
+    }
+
   } finally {
     convoySpawnInProgress = false
   }

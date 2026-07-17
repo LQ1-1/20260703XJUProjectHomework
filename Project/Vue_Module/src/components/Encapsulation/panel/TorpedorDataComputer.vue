@@ -303,6 +303,11 @@ function setTargetDistance(distance: number): void {
   message.value = '目标距离已填入'
 }
 
+function setAOB(aobValue: number): void {
+  aob.value = aobValue
+  message.value = 'AOB已填入'
+}
+
 function getTubeStates(): TorpedoTubeState[] {
   return tubes.value.map((tube) => ({
     id: tube.id,
@@ -337,6 +342,7 @@ defineExpose({
   getSelectedLaunchPlans,
   markTubesFired,
   setTargetDistance,
+  setAOB,
   getTubeStates,
 })
 </script>
@@ -374,7 +380,7 @@ defineExpose({
         </select>
       </label>
       <label>
-        最终深度 m
+        鱼雷定深 m
         <input v-model.number="finalDepthMeters" type="number" min="0" step="0.1" />
       </label>
       <label>

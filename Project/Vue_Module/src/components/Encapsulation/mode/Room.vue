@@ -395,8 +395,8 @@ onMounted(() => {
               {{ formatReason(row.reason) }}
             </template>
           </el-table-column>
-          <el-table-column prop="cargoShipsSunk" label="本局商船" width="96" />
-          <el-table-column prop="uBoatsSunk" label="本局潜艇" width="96" />
+          <el-table-column prop="cargoShipsSunk" label="本局击沉商船" width="96" />
+          <el-table-column prop="uBoatsSunk" label="本局击沉潜艇" width="96" />
           <el-table-column prop="totalTonnage" label="本局吨位" width="100" />
           <el-table-column prop="roomCargoShipsSunk" label="房间击沉商船" width="120" />
           <el-table-column prop="totalCargoShips" label="总商船数" width="96" />

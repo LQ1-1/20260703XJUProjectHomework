@@ -1,4 +1,5 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import PlayAudio from '../audiotool/PlayAudio'
 
 export const SECOND_POINTER_SCALE = 1
@@ -15,6 +16,7 @@ const MINUTES_PER_FULL_TURN = 60
 
 const playMechanicalSoundEffect = ref(false)
 const playAudio = new PlayAudio('/assets/audio/TickdaTickda.wav', 20)
+const GAME_ROUTE_NAMES = new Set(['UboatGame_Online', 'UboatGame_Online_Demo', 'UboatGame_Offline'])
 
 type ImagePoint = {
   x: number
@@ -105,6 +107,7 @@ const loadAlphaMask = (src: string): Promise<AlphaMask> =>
   })
 
 export const useMechanicalStopwatch = () => {
+  const route = useRoute()
   const rootElement = ref<HTMLElement | null>(null)
   const isButtonHovered = ref(false)
   const isRunning = ref(false)
@@ -159,6 +162,13 @@ export const useMechanicalStopwatch = () => {
   }
 
   const toggle = () => {
+    if (!GAME_ROUTE_NAMES.has(String(route.name))) {
+      stop()
+      playMechanicalSoundEffect.value = false
+      playAudio.stop()
+      return
+    }
+
     if (isRunning.value) {
       stop()
       playMechanicalSoundEffect.value = false
@@ -257,10 +267,30 @@ export const useMechanicalStopwatch = () => {
     animationFrameId = window.requestAnimationFrame(updateFrame)
     buttonMask = await loadAlphaMask(mechanicalStopwatchAssets.buttonMask)
 
+    watch(
+      () => route.name,
+      (routeName) => {
+        if (GAME_ROUTE_NAMES.has(String(routeName))) {
+          return
+        }
+
+        stop()
+        playMechanicalSoundEffect.value = false
+        playAudio.stop()
+      },
+      { immediate: true },
+    )
+
     watch(playMechanicalSoundEffect, (isPlaying) => {
+      if (!GAME_ROUTE_NAMES.has(String(route.name))) {
+        playMechanicalSoundEffect.value = false
+        playAudio.stop()
+        return
+      }
+
       if (isPlaying) {
         void (async () => {
-          while (playMechanicalSoundEffect.value) {
+          while (playMechanicalSoundEffect.value && GAME_ROUTE_NAMES.has(String(route.name))) {
             await playAudio.play()
           }
         })()
@@ -273,6 +303,8 @@ export const useMechanicalStopwatch = () => {
   onBeforeUnmount(() => {
     window.cancelAnimationFrame(animationFrameId)
     clearSingleClickTimer()
+    playMechanicalSoundEffect.value = false
+    playAudio.stop()
   })
 
   return {

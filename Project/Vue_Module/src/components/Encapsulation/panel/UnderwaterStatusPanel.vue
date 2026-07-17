@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import BearingCompassPanel from './BearingCompassPanel.vue'
 import RangeComputer from './RangeComputer.vue'
 import TorpedorDataComputer from './TorpedorDataComputer.vue'
@@ -11,6 +11,7 @@ import {
 import type { TorpedoLaunchPlan, TorpedoTubeState } from '../torpedor/torpedoTypes'
 import '../../../css/underwater-status-panel.css'
 import PlayAudio from '@/common/audiotool/PlayAudio.ts'
+import AOBComputer from './AOBComputer.vue'
 
 // -------------------- 航速选项 --------------------
 interface SpeedOption {
@@ -79,6 +80,7 @@ const selectedSpeedFraction = ref<number | string>(MANUAL_SPEED_COMMAND)
 const selectedHeadingString = ref(MANUAL_HEADING_COMMAND)
 const showTorpedoComputer = ref(false)
 const showRangeComputer = ref(false)
+const showAOBComputer = ref(false)
 const torpedoComputerRef = ref<InstanceType<typeof TorpedorDataComputer> | null>(null)
 
 // 选择变更时通知外部
@@ -134,19 +136,31 @@ defineExpose({
   getTubeStates: (): TorpedoTubeState[] => torpedoComputerRef.value?.getTubeStates() ?? [],
 })
 
-function handleUseRangeDistance(distance: number): void {
-  torpedoComputerRef.value?.setTargetDistance(distance)
+async function handleUseRangeDistance(distance: number): Promise<void> {
   showTorpedoComputer.value = true
+  await nextTick()
+  torpedoComputerRef.value?.setTargetDistance(distance)
+}
+
+async function handleUseAOB(aob: number): Promise<void> {
+  showTorpedoComputer.value = true
+  await nextTick()
+  torpedoComputerRef.value?.setAOB(aob)
 }
 
 function handleTorpedoComputerOpened(): void {
   //播放音频
   void (async () => {
-    const playAudio1 = new PlayAudio('/assets/audio/RohrEinsBisVierBewassern.wav', 3)
-    await playAudio1.play()
+
+    const playAudio3 = new PlayAudio('/assets/audio/AufGefechstation.wav',2)
+    await playAudio3.play()
 
     const playAudio2 = new PlayAudio('/assets/audio/RohrEinsBisVierKlarmachen.wav', 2)
     await playAudio2.play()
+
+    const playAudio1 = new PlayAudio('/assets/audio/RohrEinsBisVierBewassern.wav', 3)
+    await playAudio1.play()
+
   })()
 }
 
@@ -201,6 +215,17 @@ watch(showTorpedoComputer, (newValue, oldValue) => {
 
     <div class="computer-switches" aria-label="计算机开关">
       <fieldset>
+        <legend>是否打开AOB计算机</legend>
+        <label>
+          <input v-model="showAOBComputer" type="radio" :value="true" />
+          true
+        </label>
+        <label>
+          <input v-model="showAOBComputer" type="radio" :value="false" />
+          false
+        </label>
+      </fieldset>
+      <fieldset>
         <legend>是否打开测距计算机</legend>
         <label>
           <input v-model="showRangeComputer" type="radio" :value="true" />
@@ -224,7 +249,13 @@ watch(showTorpedoComputer, (newValue, oldValue) => {
       </fieldset>
     </div>
 
-    <div v-if="showTorpedoComputer || showRangeComputer" class="computer-stack">
+    <div v-if="showTorpedoComputer || showRangeComputer || showAOBComputer" class="computer-stack">
+
+      <AOBComputer
+        v-if="showAOBComputer"
+        :periscope-relative-bearing-degrees="periscopeRelativeBearingDegrees"
+        @use-aob="handleUseAOB"
+      />
 
       <RangeComputer v-if="showRangeComputer" :default-target-height="targetDefaultHeight"
         @use-distance="handleUseRangeDistance" />
