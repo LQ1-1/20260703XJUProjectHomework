@@ -625,7 +625,7 @@ onMounted(async () => {
         const msg = cameraCtrl.toggleAiming(submarine)
         if (msg) showLimitNotice(msg)
       }
-      if (code === 'Space' && pressed) {
+      if (code === 'Space' && pressed) {  //处理空格按下
         handleSpaceFire()
       }
     }

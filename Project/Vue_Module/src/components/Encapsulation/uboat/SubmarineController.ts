@@ -26,6 +26,8 @@ import { CollisionDecision, CollisionSituationType } from '../modules/hitdetect.
 import { moveTowards } from '../modules/mathUtils.ts'
 import { normalizeSubmarine, tuneSubmarineMaterials, disposeObject } from '../modules/modelUtils.ts'
 import { normalizeDegrees, normalizeSignedDegrees, yawToCompassDegrees } from '../modules/navigationMath.ts'
+import { findPropellerMeshes, updatePropellerRotation } from '../modules/propellerAnimation.ts'
+import { PropellerBubbleTrail } from '../modules/propellerBubbleTrail.ts'
 import { MapCode } from '../../../common/map/mapcode.ts'
 import {
   MAX_DEPTH_SCENE,
@@ -104,6 +106,8 @@ export class SubmarineController implements Updatable {
   // ---- Three.js 节点 ----
   public readonly root: THREE.Group
   public visual!: THREE.Object3D
+  private propellers: THREE.Object3D[] = []
+  private propellerBubbleTrail: PropellerBubbleTrail | undefined
 
   /** 保存模型管理对象 */
   private readonly entityRegistry: GameEntityRegistry
@@ -229,6 +233,24 @@ export class SubmarineController implements Updatable {
 
       options.entityRegistry
     )
+    controller.propellers = findPropellerMeshes(visual, {
+      names: ['Material2.010'],
+      axis: 'x',
+      splitMeshByAxis: 'y',
+      tailSign: -1,
+      maxPropellers: 1,
+      label: 'submarine',
+    })
+    if (controller.propellers.length > 0) {
+      controller.propellerBubbleTrail = new PropellerBubbleTrail(engine, {
+        sources: controller.propellers,
+        getSpeed: () => controller.currentSpeed,
+        maxBubbles: 360,
+        emitRate: 60,
+      })
+      engine.scene.add(controller.propellerBubbleTrail.root)
+      engine.addUpdatable(controller.propellerBubbleTrail)
+    }
     engine.addUpdatable(controller)
 
     // 7. 初始化相机（仅玩家潜艇）
@@ -608,6 +630,11 @@ export class SubmarineController implements Updatable {
       -Math.sin(this.heading) * this.currentSpeed * delta,
     )
     this.root.position.add(this.movementDelta)
+    updatePropellerRotation(this.propellers, this.currentSpeed, delta, {
+      axis: 'x',
+      spinMultiplier: 36,
+      directionMultiplier: 1,
+    })
   }
 
   // ==================== 高度 ====================
@@ -844,6 +871,7 @@ export class SubmarineController implements Updatable {
 
   dispose(): void {
     this.entityRegistry.unregister(this.id)
+    this.propellerBubbleTrail?.dispose()
     this.engine.removeUpdatable(this)
     this.root.removeFromParent()
     disposeObject(this.visual)

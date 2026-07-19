@@ -21,6 +21,7 @@ import type { GameEngine } from '../engine/GameEngine'
 import type { CollisionEntitySnapshot, CollisionEvent } from '../modules/hitdetect'
 import { CollisionDecision, CollisionSituationType } from '../modules/hitdetect.ts'
 import { normalizeSubmarine, disposeObject } from '../modules/modelUtils'
+import { findPropellerMeshes, updatePropellerRotation } from '../modules/propellerAnimation'
 import { MapCode } from '../../../common/map/mapcode'
 import { CARGO_MODEL_LENGTH_SCENE, CARGO_SURFACE_MODEL_OFFSET, METERS_TO_SCENE, SINK_DEPTH } from '../constant/sceneUnits'
 import { GameEntityRegistry } from '../entitymanager/GameEntityRegistry.ts'
@@ -50,6 +51,7 @@ export class CargoShipController implements Updatable {
   public readonly id: string
   public readonly root: THREE.Group
   public readonly visual: THREE.Object3D
+  private propellers: THREE.Object3D[] = []
 
   /** 模型归一化后的实际高度（场景单位），可用于距离测算 */
   public readonly modelHeight: number
@@ -154,7 +156,7 @@ export class CargoShipController implements Updatable {
       root: root
     })
 
-    return new CargoShipController(
+    const ship = new CargoShipController(
       options.id,
       root,
       visual,
@@ -164,6 +166,14 @@ export class CargoShipController implements Updatable {
       modelSize.y,
       options.entityRegistry,
     )
+    ship.propellers = findPropellerMeshes(visual, {
+      axis: 'x',
+      tailSign: -1,
+      maxPropellers: 2,
+      label: 'cargo ship',
+    })
+
+    return ship
   }
 
   // ==================== 构造函数 ====================
@@ -197,6 +207,11 @@ export class CargoShipController implements Updatable {
     }
 
     if (Math.abs(this.currentSpeed) < 0.0001) return
+    updatePropellerRotation(this.propellers, this.currentSpeed, delta, {
+      axis: 'x',
+      spinMultiplier: 26,
+      directionMultiplier: -1,
+    })
 
     this.root.rotation.y = this.heading
 

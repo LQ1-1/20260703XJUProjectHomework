@@ -152,7 +152,7 @@ function handleTorpedoComputerOpened(): void {
   //播放音频
   void (async () => {
 
-    const playAudio3 = new PlayAudio('/assets/audio/AufGefechstation.wav',2)
+    const playAudio3 = new PlayAudio('/assets/audio/AufGefechstation.wav', 2)
     await playAudio3.play()
 
     const playAudio2 = new PlayAudio('/assets/audio/RohrEinsBisVierKlarmachen.wav', 2)
@@ -203,6 +203,12 @@ watch(showTorpedoComputer, (newValue, oldValue) => {
         <dt>状态</dt>
         <dd>{{ navigationState }}</dd>
       </div>
+
+      <div class="bearing-compass-row">
+        <BearingCompassPanel :heading-degrees="headingDegrees"
+          :periscope-relative-bearing-degrees="periscopeRelativeBearingDegrees" />
+      </div>
+
       <div>
         <dt>世界坐标-测试使用</dt>
         <dd>坐标:{{ submarineWorldX.toFixed(1) }},{{ submarineWorldZ.toFixed(1) }}</dd>
@@ -251,11 +257,8 @@ watch(showTorpedoComputer, (newValue, oldValue) => {
 
     <div v-if="showTorpedoComputer || showRangeComputer || showAOBComputer" class="computer-stack">
 
-      <AOBComputer
-        v-if="showAOBComputer"
-        :periscope-relative-bearing-degrees="periscopeRelativeBearingDegrees"
-        @use-aob="handleUseAOB"
-      />
+      <AOBComputer v-if="showAOBComputer" :periscope-relative-bearing-degrees="periscopeRelativeBearingDegrees"
+        @use-aob="handleUseAOB" />
 
       <RangeComputer v-if="showRangeComputer" :default-target-height="targetDefaultHeight"
         @use-distance="handleUseRangeDistance" />
@@ -264,8 +267,5 @@ watch(showTorpedoComputer, (newValue, oldValue) => {
         :periscope-relative-bearing-degrees="periscopeRelativeBearingDegrees" :current-depth-meters="depthMeters"
         :remaining-torpedoes="remainingTorpedoes" />
     </div>
-
-    <BearingCompassPanel :heading-degrees="headingDegrees"
-      :periscope-relative-bearing-degrees="periscopeRelativeBearingDegrees" />
   </aside>
 </template>

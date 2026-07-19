@@ -204,7 +204,7 @@ export class MapCode {
         return res;
     }
 
-
+    //将xxxx行，xxxx列以字符串的形式表达
     gridKey(row: number, col: number) {
         return `${row}:${col}`
     }
@@ -249,8 +249,8 @@ export class MapCode {
     }
 
     private getTileMapsByCenter(centerX: number, centerZ: number, layer: number) {
-        const tileSize = this.getTileLayerSize(layer)   //对应的层级的瓦片地图对应的的地图长度不同
-        const tileCount = this.getTileLayerCount(layer)
+        const tileSize = this.getTileLayerSize(layer)   //对应的层级的瓦片地图对应的的地图长度
+        const tileCount = this.getTileLayerCount(layer) //该层要展示的图片的数量
         const maxTileIndex = tileCount - 1  //瓦片地图的行号，列号边界
 
         const column = Math.floor(centerX / tileSize)   //地图坐标转换成列
@@ -325,12 +325,13 @@ export class MapCode {
         }
     }
 
+    //鼠标在地图上拖动，就看作是在用户当前坐标的基础上朝拖动方向移动。
     getTileMapsMouseDrag() {
         let layer = this.getTileMapLayer(this.zoom)
-        let newCenterX = this.x - this.offsetX * OFFSETSENSITIVITY
+        let newCenterX = this.x - this.offsetX * OFFSETSENSITIVITY //offset就是玩家鼠标在地图上移动了多少像素，乘以一个比例系数转换成地图上的偏移
         let newCenterZ = this.z - this.offsetZ * OFFSETSENSITIVITY
 
-        return this.getTileMapsByCenter(newCenterX, newCenterZ, layer)
+        return this.getTileMapsByCenter(newCenterX, newCenterZ, layer)  //在玩家当前坐标的基础上加上偏移向量就是新的的显示中心
 
     }
     /*
@@ -344,7 +345,7 @@ export class MapCode {
     //------------------------------------------------------------------//
 
 
-    //在地图上标记潜艇当前的位置
+    //在地图上标记潜艇当前的位置，在网格地图图片上标记玩家的位置
     currentPositionOnTheMap(zoom: number) {
         let layer = this.getTileMapLayer(zoom)
 
@@ -352,9 +353,10 @@ export class MapCode {
         let length: number = this.getTileLayerSize(layer)
 
 
-        let x_offset = this.x % length
+        let x_offset = this.x % length  //玩家位置在该区域网格上的偏移量
         let z_offset = this.z % length
 
+        //偏移量 比上 该网格的边长 就是玩家在该网格上的(x,z)上的比例 再乘以 网格图片的边长 就得到了 应该在图片的那个位置标明玩家当前的位置
         let x_offset_pixel = x_offset / length * TILEMAPPICTURESIZE   //应该在瓦片地图上水平偏移多少
         let z_offset_pixel = z_offset / length * TILEMAPPICTURESIZE   //应该在瓦片地图上纵向偏移多少
         let result = {
@@ -374,3 +376,9 @@ export class MapCode {
 
 // let test2=new MapCode(0,0);
 // console.log(`1000, 550对应的Code是AD16,经过转换: ${test2.getWorldLocation('AD16').first}, ${test2.getWorldLocation('AD16').second}`);
+
+
+
+
+// let testCase = new MapCode(0,0)
+// console.log(testCase.getWorldLocation('AD5156'))

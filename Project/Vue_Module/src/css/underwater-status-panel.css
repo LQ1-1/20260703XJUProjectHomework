@@ -55,6 +55,25 @@
   border-bottom: 1px solid rgba(148, 192, 212, 0.16);
 }
 
+.instrument-strip .bearing-compass-row {
+  grid-column: 1 / -1;
+  padding: 0;
+  border-right: 0;
+  border-bottom: 1px solid rgba(148, 192, 212, 0.16);
+}
+
+.instrument-strip .bearing-compass-row .bearing-compass-panel {
+  border-top: 0;
+}
+
+.instrument-strip .bearing-compass-row ~ div:nth-child(2n) {
+  border-right: 1px solid rgba(148, 192, 212, 0.16);
+}
+
+.instrument-strip .bearing-compass-row ~ div:nth-child(2n + 1) {
+  border-right: 0;
+}
+
 .instrument-strip dt,
 .instrument-strip dd {
   margin: 0;
@@ -123,8 +142,18 @@
   border-bottom: 1px solid rgba(148, 192, 212, 0.16);
 }
 
+.underwater-status--full .instrument-strip .bearing-compass-row {
+  min-height: 0;
+  padding: 0;
+  align-content: stretch;
+}
+
 .underwater-status--full .instrument-strip div:nth-child(2n) {
   border-right: 1px solid rgba(148, 192, 212, 0.16);
+}
+
+.underwater-status--full .instrument-strip .bearing-compass-row {
+  border-right: 0;
 }
 
 .underwater-status--full .instrument-strip div:last-child {

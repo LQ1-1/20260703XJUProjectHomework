@@ -16,6 +16,8 @@ import type { Updatable, GameEngine } from '../engine/GameEngine'
 import type { CollisionEntitySnapshot, CollisionEvent } from '../modules/hitdetect'
 import { CollisionDecision, CollisionSituationType } from '../modules/hitdetect.ts'
 import { normalizeSubmarine, disposeObject } from '../modules/modelUtils'
+import { findPropellerMeshes, updatePropellerRotation } from '../modules/propellerAnimation'
+import { PropellerBubbleTrail } from '../modules/propellerBubbleTrail'
 import { MODEL_LENGTH_SCENE, METERS_TO_SCENE, GAME_SPEED_MULTIPLIER } from '../constant/sceneUnits'
 import { GameEntityRegistry } from '../entitymanager/GameEntityRegistry.ts'
 import { TorpedoExplosion } from '../ExplosionSplashEffect/explosionSplashEffect.ts'
@@ -76,6 +78,8 @@ export class TorpedorController implements Updatable {
   public readonly ownerId: string | undefined
   public readonly root: THREE.Group
   public readonly visual: THREE.Object3D
+  private propellers: THREE.Object3D[] = []
+  private propellerBubbleTrail: PropellerBubbleTrail | undefined
   public readonly modelLength: number
   public readonly modelHeight: number
   public readonly torpedoType: TorpedoType
@@ -198,6 +202,22 @@ export class TorpedorController implements Updatable {
       },
       options.entityRegistry,
     )
+    torpedo.propellers = findPropellerMeshes(visual, {
+      axis: 'x',
+      tailSign: -1,
+      maxPropellers: 1,
+      label: 'torpedo',
+    })
+    if (torpedo.propellers.length > 0) {
+      torpedo.propellerBubbleTrail = new PropellerBubbleTrail(engine, {
+        sources: torpedo.propellers,
+        getSpeed: () => torpedo.currentSpeed,
+        maxBubbles: 140,
+        emitRate: 28,
+      })
+      engine.scene.add(torpedo.propellerBubbleTrail.root)
+      engine.addUpdatable(torpedo.propellerBubbleTrail)
+    }
 
     engine.scene.add(torpedo.root)
     engine.addUpdatable(torpedo)
@@ -219,6 +239,12 @@ export class TorpedorController implements Updatable {
       this.dispose()
       return
     }
+
+    updatePropellerRotation(this.propellers, this.currentSpeed, delta, {
+      axis: 'x',
+      spinMultiplier: 88,
+      directionMultiplier: -1,
+    })
 
     this.movementDelta.set(
       Math.cos(this.heading) * this.currentSpeed * delta,
@@ -316,6 +342,7 @@ export class TorpedorController implements Updatable {
 
 
     this.entityRegistry.unregister(this.id)
+    this.propellerBubbleTrail?.dispose()
     this.engine.removeUpdatable(this)
     this.root.removeFromParent()
     disposeObject(this.visual)

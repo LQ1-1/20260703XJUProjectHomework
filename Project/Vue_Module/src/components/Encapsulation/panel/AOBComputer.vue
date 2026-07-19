@@ -6,6 +6,42 @@ const message = ref('')
 const targetRealHeading = ref<number | null>(0)
 const ownShipHeading = ref<number | null>(0)
 const targetRelativeBearingDegrees = ref<number | null>(0)
+const targetRealHeadingInput = ref('000')
+const ownShipHeadingInput = ref('000')
+
+function normalizeHeadingDegrees(value: number): number {
+    const normalized = value % 360
+    if (normalized === 0 && value > 0) return 360
+    return normalized < 0 ? normalized + 360 : normalized
+}
+
+function formatHeadingDegrees(value: number | null): string {
+    if (value === null || !Number.isFinite(value)) return '---'
+    return Math.round(normalizeHeadingDegrees(value)).toString().padStart(3, '0')
+}
+
+function parseHeadingInput(raw: string): number | null {
+    const value = Number(raw.replace('°', '').trim())
+    if (!Number.isFinite(value)) return null
+    return normalizeHeadingDegrees(value)
+}
+
+function updateTargetHeadingFromInput(): void {
+    targetRealHeading.value = parseHeadingInput(targetRealHeadingInput.value)
+}
+
+function updateOwnShipHeadingFromInput(): void {
+    ownShipHeading.value = parseHeadingInput(ownShipHeadingInput.value)
+}
+
+function commitTargetHeadingInput(): void {
+    targetRealHeadingInput.value = formatHeadingDegrees(targetRealHeading.value)
+}
+
+function commitOwnShipHeadingInput(): void {
+    ownShipHeadingInput.value = formatHeadingDegrees(ownShipHeading.value)
+}
+
 const AOB = computed(() => {
     if (
         targetRealHeading.value === null ||
@@ -61,11 +97,25 @@ function useAOB() {
         <div class="computer-grid">
             <label>
                 目标航向
-                <input v-model.number="targetRealHeading" type="number" min="0" step="0.01" />
+                <input
+                    v-model="targetRealHeadingInput"
+                    type="text"
+                    inputmode="numeric"
+                    maxlength="3"
+                    @input="updateTargetHeadingFromInput"
+                    @blur="commitTargetHeadingInput"
+                />
             </label>
             <label>
                 本艇航向
-                <input v-model.number="ownShipHeading" type="number" min="0" step="0.01" />
+                <input
+                    v-model="ownShipHeadingInput"
+                    type="text"
+                    inputmode="numeric"
+                    maxlength="3"
+                    @input="updateOwnShipHeadingFromInput"
+                    @blur="commitOwnShipHeadingInput"
+                />
             </label>
             <label>
                 目标相对方位

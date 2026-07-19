@@ -19,7 +19,7 @@ export class TorpedoFireControlComputerParameter {
 
     getTime(): number {
         if (
-            !Number.isFinite(this.AOB) ||
+            !Number.isFinite(this.AOB) ||   //isFinite判断是不是有限数字，避免被异常值污染
             !Number.isFinite(this.Distance) ||
             !Number.isFinite(this.TargetSpeed) ||
             !Number.isFinite(this.TorpedorSpeed) ||
@@ -32,18 +32,20 @@ export class TorpedoFireControlComputerParameter {
 
         const AngleOnBoard = (Math.PI * this.AOB) / 180.0
 
+        //cos(C)=(a^2 + b^2 - c^2)/(2ab)
+        //c^2 = a^2 + b^2 -2ab cos(C)
         const a = Math.pow(this.TargetSpeed, 2) - Math.pow(this.TorpedorSpeed, 2)
         const b = -2 * this.TargetSpeed * this.Distance * Math.cos(AngleOnBoard)
-        const c = Math.pow(this.Distance, 2)
+        const c = Math.pow(this.Distance, 2) 
 
-        if (Math.abs(a) < 0.000001) {
+        if (Math.abs(a) < 0.000001) {   //处理二次方程退化成一次方程的情况
             if (Math.abs(b) < 0.000001) return -1
             const linearTime = -c / b
             return Number.isFinite(linearTime) && linearTime >= 0 ? linearTime : -1
         }
 
-        const discriminant = Math.pow(b, 2) - 4 * a * c
-        if (discriminant < 0) return -1
+        const discriminant = Math.pow(b, 2) - 4 * a * c     //判别式
+        if (discriminant < 0) return -1 //无解
 
         const sqrtDiscriminant = Math.sqrt(discriminant)
         const time1 = (-b + sqrtDiscriminant) / (2 * a)
@@ -73,15 +75,17 @@ export class TorpedoFireControlComputerParameter {
             return NaN
         }
 
+        //cos(拦截角度)= (鱼雷运动距离^2 + 距离^2 - 目标运动距离^2)/(2 x 鱼雷距离 x 距离)
+
         const cosInterceptAngel = (
             Math.pow(this.Distance, 2) +
             Math.pow(TorpedorDistance, 2) -
             Math.pow(this.TargetSpeed * TorpedorTime, 2)
         ) / (2 * this.Distance * TorpedorDistance)
 
-        const clampedCos = Math.min(1, Math.max(-1, cosInterceptAngel))
-        const InterceptAngel_radian = Math.acos(clampedCos)
-        const InterceptAngel_Degree = InterceptAngel_radian * 180 / Math.PI
+        const clampedCos = Math.min(1, Math.max(-1, cosInterceptAngel)) //将cosInterceptAngel确保在-1, 1之间
+        const InterceptAngel_radian = Math.acos(clampedCos) //弧度制拦截角度， acos = arccos
+        const InterceptAngel_Degree = InterceptAngel_radian * 180 / Math.PI //将弧度制转换成角度制
 
         return InterceptAngel_Degree
     }
@@ -130,6 +134,9 @@ export class RangeComputer {
     }
 }
 
+/*
+1节=0.5144m/s =1.85184km/h
+*/
 
 // let testCase = new TorpedoFireControlComputerParameter(78, 1590, 7, 30);
 // console.log(`拦截角度：${testCase.getInterceptAngel()}; 需要时间：${testCase.getTime()}, 鱼雷航行距离：${testCase.getTorpedorDistance()}`)
