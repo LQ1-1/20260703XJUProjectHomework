@@ -24,6 +24,18 @@ export interface UnderwaterAppearanceOptions {
   fogDensityMultiplier?: number
 }
 
+export interface AtmosphereOptions {
+  surfaceBackground?: THREE.Color
+  submergedBackground?: THREE.Color
+  fogColor?: THREE.Color
+  fogDensityMultiplier?: number
+  hemisphereIntensityMultiplier?: number
+  keyLightIntensityMultiplier?: number
+  rimLightIntensityMultiplier?: number
+  toneMappingExposure?: number
+  environmentMap?: THREE.Texture | null
+}
+
 export interface GameEngineOptions {
   container: HTMLElement
   cameraFov?: number
@@ -67,6 +79,19 @@ export class GameEngine {
   private readonly sunModelScale: number
 
   private hasSunModel = false
+  private atmosphere: Required<Omit<AtmosphereOptions, 'environmentMap'>> & {
+    environmentMap: THREE.Texture | null
+  } = {
+    surfaceBackground: SURFACE_BACKGROUND.clone(),
+    submergedBackground: SUBMERGED_BACKGROUND.clone(),
+    fogColor: SURFACE_BACKGROUND.clone(),
+    fogDensityMultiplier: 1,
+    hemisphereIntensityMultiplier: 1,
+    keyLightIntensityMultiplier: 1,
+    rimLightIntensityMultiplier: 1,
+    toneMappingExposure: 1.28,
+    environmentMap: null,
+  }
 
   constructor(private options: GameEngineOptions) {
     const opts = { ...DEFAULT_OPTIONS, ...options }
@@ -168,6 +193,44 @@ export class GameEngine {
     this.keyLightTarget.position.copy(followTarget)
   }
 
+  updateAtmosphere(options: AtmosphereOptions): void {
+    if (options.surfaceBackground) this.atmosphere.surfaceBackground.copy(options.surfaceBackground)
+    if (options.submergedBackground) this.atmosphere.submergedBackground.copy(options.submergedBackground)
+    if (options.fogColor) this.atmosphere.fogColor.copy(options.fogColor)
+    if (options.fogDensityMultiplier !== undefined) {
+      this.atmosphere.fogDensityMultiplier = options.fogDensityMultiplier
+    }
+    if (options.hemisphereIntensityMultiplier !== undefined) {
+      this.atmosphere.hemisphereIntensityMultiplier = options.hemisphereIntensityMultiplier
+    }
+    if (options.keyLightIntensityMultiplier !== undefined) {
+      this.atmosphere.keyLightIntensityMultiplier = options.keyLightIntensityMultiplier
+    }
+    if (options.rimLightIntensityMultiplier !== undefined) {
+      this.atmosphere.rimLightIntensityMultiplier = options.rimLightIntensityMultiplier
+    }
+    if (options.toneMappingExposure !== undefined) {
+      this.atmosphere.toneMappingExposure = options.toneMappingExposure
+      this.renderer.toneMappingExposure = options.toneMappingExposure
+    }
+    if (options.environmentMap !== undefined) {
+      this.atmosphere.environmentMap = options.environmentMap
+      this.scene.environment = options.environmentMap
+      this.scene.background = options.environmentMap ?? this.atmosphere.surfaceBackground
+    }
+
+    const uniforms = this.backgroundDome.material.uniforms
+    ;(uniforms.uSurfaceColor?.value as THREE.Color | undefined)?.copy(this.atmosphere.surfaceBackground)
+    ;(uniforms.uSubmergedColor?.value as THREE.Color | undefined)?.copy(this.atmosphere.submergedBackground)
+    if (this.scene.fog instanceof THREE.FogExp2) {
+      this.scene.fog.color.copy(this.atmosphere.fogColor)
+      this.scene.fog.density = 0.0008 * this.atmosphere.fogDensityMultiplier
+    }
+    this.hemisphereLight.intensity = 3.4 * this.atmosphere.hemisphereIntensityMultiplier
+    this.keyLight.intensity = 6.2 * this.atmosphere.keyLightIntensityMultiplier
+    this.rimLight.intensity = 2.6 * this.atmosphere.rimLightIntensityMultiplier
+  }
+
   /** 注册需要每帧调用的对象 */
   addUpdatable(updatable: Updatable): void {
     this.updatables.add(updatable)
@@ -188,20 +251,25 @@ export class GameEngine {
       return
     }
 
-    const surfaceBg = SURFACE_BACKGROUND
-    const submergedBg = SUBMERGED_BACKGROUND
+    const surfaceBg = this.atmosphere.surfaceBackground
+    const submergedBg = this.atmosphere.submergedBackground
     const deepBg = DEEP_BACKGROUND
     const submergeFactor = THREE.MathUtils.smoothstep(depthMeters, 0.02, 3)
     const depthFactor = THREE.MathUtils.smoothstep(depthMeters, 12, 80)
 
     this.scene.fog.color.lerpColors(surfaceBg, submergedBg, submergeFactor)
+    this.scene.fog.color.lerp(this.atmosphere.fogColor, 0.35)
     this.scene.fog.color.lerp(deepBg, depthFactor)
     const submergedFogDensity = THREE.MathUtils.lerp(0.0008, 0.006, submergeFactor)
     const fogDensity = THREE.MathUtils.lerp(submergedFogDensity, 0.03, depthFactor)
-    this.scene.fog.density = fogDensity * (options.fogDensityMultiplier ?? 1)
-    this.hemisphereLight.intensity = THREE.MathUtils.lerp(3.4, 0.22, depthFactor)
-    this.keyLight.intensity = THREE.MathUtils.lerp(6.2, 0.28, depthFactor)
-    this.rimLight.intensity = THREE.MathUtils.lerp(2.6, 0.75, depthFactor)
+    this.scene.fog.density =
+      fogDensity * (options.fogDensityMultiplier ?? 1) * this.atmosphere.fogDensityMultiplier
+    this.hemisphereLight.intensity =
+      THREE.MathUtils.lerp(3.4, 0.22, depthFactor) * this.atmosphere.hemisphereIntensityMultiplier
+    this.keyLight.intensity =
+      THREE.MathUtils.lerp(6.2, 0.28, depthFactor) * this.atmosphere.keyLightIntensityMultiplier
+    this.rimLight.intensity =
+      THREE.MathUtils.lerp(2.6, 0.75, depthFactor) * this.atmosphere.rimLightIntensityMultiplier
   }
 
   private startLoop(): void {

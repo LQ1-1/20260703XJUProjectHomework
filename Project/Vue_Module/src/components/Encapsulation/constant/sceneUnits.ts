@@ -62,7 +62,7 @@ export const SPEED_TRANSITION_DEPTH = SPEED_TRANSITION_DEPTH_METERS * METERS_TO_
 // -------------------- 模型归一化 --------------------
 
 /** 潜艇吃水偏移量，微调使艇体与水面平齐 */
-export const SURFACE_MODEL_OFFSET = -0.01
+export const SURFACE_MODEL_OFFSET = -0.3
 
 // -------------------- 视觉 --------------------
 

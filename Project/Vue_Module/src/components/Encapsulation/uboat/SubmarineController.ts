@@ -49,6 +49,7 @@ import { GameEntityRegistry } from '../entitymanager/GameEntityRegistry.ts'
 import { TorpedorController } from '../torpedor/TorpedorController.ts'
 import type { TorpedoLaunchPlan } from '../torpedor/torpedoTypes.ts'
 import PlayAudio from '@/common/audiotool/PlayAudio.ts'
+import type { OceanSurfaceSample } from '../ocean/OceanSimulation.ts'
 
 export const TORPEDO_FORWARD_OFFSET_FROM_THE_BOW = 3.5
 export const TORPEDO_LATERAL_OFFSET_FROM_THE_CENTERLINE=1
@@ -142,6 +143,9 @@ export class SubmarineController implements Updatable {
   private floodAudioPlayedForCurrentDive = false
   private blowAudioPlayedForCurrentAscent = false
   private _sampledWaterHeight = 0
+  private sampledWaterNormal = new THREE.Vector3(0, 1, 0)
+  private wavePitch = 0
+  private waveRoll = 0
 
   // ---- 鱼雷数量 ----
   private torpedorCount: number = 14; //鱼雷数量固定14发
@@ -323,6 +327,15 @@ export class SubmarineController implements Updatable {
 
   setSampledWaterHeight(h: number): void {
     this._sampledWaterHeight = h
+    this.sampledWaterNormal.set(0, 1, 0)
+    this.wavePitch = 0
+    this.waveRoll = 0
+  }
+
+  setSampledSurface(sample: OceanSurfaceSample): void {
+    this._sampledWaterHeight = sample.height
+    this.sampledWaterNormal.copy(sample.normal).normalize()
+    this.updateWaveAttitudeFromNormal()
   }
 
   isAtSurface(): boolean {
@@ -661,13 +674,43 @@ export class SubmarineController implements Updatable {
       1,
     )
     const maxPitch = this.isAlarmBuffActive ? this.alarmMaxPitch : this.maxPitch
-    const targetPitch = -pitchIntent * maxPitch
+    const waveFactor = this.surfaceAttitudeFactor()
+    const targetPitch = -pitchIntent * maxPitch + this.wavePitch * waveFactor
     this.visual.rotation.z = THREE.MathUtils.damp(
       this.visual.rotation.z,
       targetPitch,
       this.pitchSmoothing,
       delta,
     )
+    this.visual.rotation.x = THREE.MathUtils.damp(
+      this.visual.rotation.x,
+      this.waveRoll * waveFactor,
+      1.8,
+      delta,
+    )
+  }
+
+  private updateWaveAttitudeFromNormal(): void {
+    const normal = this.sampledWaterNormal
+    const normalY = Math.max(normal.y, 0.2)
+    const gradientX = -normal.x / normalY
+    const gradientZ = -normal.z / normalY
+    const forwardX = Math.cos(this.heading)
+    const forwardZ = -Math.sin(this.heading)
+    const rightX = Math.sin(this.heading)
+    const rightZ = Math.cos(this.heading)
+    const slopeForward = gradientX * forwardX + gradientZ * forwardZ
+    const slopeRight = gradientX * rightX + gradientZ * rightZ
+    const maxSurfaceAngle = THREE.MathUtils.degToRad(8)
+    this.wavePitch = THREE.MathUtils.clamp(Math.atan(slopeForward), -maxSurfaceAngle, maxSurfaceAngle)
+    this.waveRoll = THREE.MathUtils.clamp(-Math.atan(slopeRight), -maxSurfaceAngle, maxSurfaceAngle)
+  }
+
+  private surfaceAttitudeFactor(): number {
+    const depthMeters = this.currentDepth * SCENE_TO_METERS
+    if (depthMeters <= 1) return 1
+    if (depthMeters >= 5) return 0
+    return 1 - THREE.MathUtils.smoothstep(depthMeters, 1, 5)
   }
 
   private updateSinking(delta: number): void {

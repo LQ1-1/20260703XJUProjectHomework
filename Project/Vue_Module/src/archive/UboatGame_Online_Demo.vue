@@ -13,7 +13,6 @@ import {
 } from '../uboat/SubmarineController.ts'
 import { CargoShipController } from '../cargoship/CargoShipController.ts'
 import { OceanController } from '../ocean/OceanController.ts'
-import { OceanWeatherController } from '../ocean/OceanWeatherController.ts'
 import { tuneSunMaterials, disposeObject } from '../modules/modelUtils.ts'
 import { HitDetectSystem, type CollisionEvent } from '../modules/hitdetect.ts'
 import UnderwaterStatusPanel from '../panel/UnderwaterStatusPanel.vue'
@@ -47,7 +46,8 @@ import {
   getCargoStateLocation,
   getCargoStateModelID,
   getCargoStateSpeedKnots,
-  getInitialUBoatSpawn as getSharedInitialUBoatSpawn,
+  getDemoInitialUBoatSpawn as getSharedDemoInitialUBoatSpawn,
+  getDemoUBoatWorldPosition,
   getUBoatStateDepth,
   getUBoatStateHeading,
   getUBoatStateLocation,
@@ -84,6 +84,13 @@ const OCEAN_SEGMENTS = 256
 const SUN_OFFSET = new THREE.Vector3(-180, 115, -220)
 const SUN_DIRECTION = SUN_OFFSET.clone().normalize()
 
+const WAVE_SETTINGS = {
+  primarySwell: 0.88,
+  crossSwell: 0.64,
+  mediumChoppyWaves: 0.24,
+  lightRipples: 0.17,
+}
+
 const SURFACE_DEPTH_EPSILON_SCENE = 0.02
 const SCENE_TO_METERS = 77 / 22 // MODEL_LENGTH_METERS / MODEL_LENGTH_SCENE
 const UNDERWATER_UI_DEPTH_METERS = 11 //控制UnderWaterStatusPanel显示的深度指标, 潜深超过这个值后显示UnderWaterStatusPanel界面
@@ -92,6 +99,9 @@ const FALLBACK_U_BOAT_SPAWN = {
   headingDegrees: 180,
   depthMeters: 0,
 }
+const MAP_MIN = 0
+const MAP_MAX = 12150
+const DEMO_INITIAL_SUBMARINE_DISTANCE = 1600
 
 // -------------------- Vue 响应式状态 --------------------
 const route = useRoute()
@@ -155,7 +165,6 @@ let submarine: SubmarineController | undefined
 let remoteSubmarines = new Map<string, SubmarineController>()
 let cargoShips: CargoShipController[] = []
 let ocean: OceanController | undefined
-let weather: OceanWeatherController | undefined
 let hitDetect: HitDetectSystem | undefined
 let sunModel: THREE.Object3D | undefined
 let hintTimer: ReturnType<typeof setTimeout> | undefined
@@ -174,6 +183,7 @@ const activeSyncedTorpedoes = new Map<string, TorpedorController>()
 const cargoShipCreateTasks = new Map<string, Promise<CargoShipController | undefined>>()
 const remoteSubmarineCreateTasks = new Map<string, Promise<SubmarineController | undefined>>()
 const reportedHitTorpedoes = new Set<string>()
+let isDemoInitialPositionApplied = false
 
 // -------------------- 面板引用 --------------------
 const statusPanelRef = ref<InstanceType<typeof UnderwaterStatusPanel> | null>(null)
@@ -195,18 +205,39 @@ async function fetchWorldSyncPayload(): Promise<any | undefined> {
   }
 }
 
-function getInitialUBoatSpawn(payload: any): {
+function getDemoInitialUBoatSpawn(payload: any): {
   id: string
   worldPosition: { x: number; z: number }
   initialHeadingDegrees: number
   initialDepthMeters: number
   torpedoesRemaining?: number
+  isDemoPositionApplied?: boolean
 } {
-  return getSharedInitialUBoatSpawn(
+  return getSharedDemoInitialUBoatSpawn(
     payload,
     { selfUUID: selfUUID.value, selfUBoatID: selfUBoatID.value },
     FALLBACK_U_BOAT_SPAWN,
+    { min: MAP_MIN, max: MAP_MAX },
+    DEMO_INITIAL_SUBMARINE_DISTANCE,
   )
+}
+
+function applyDemoInitialPositionFromPayload(payload: any): boolean {
+  if (!submarine || isDemoInitialPositionApplied) return false
+
+  const demoWorldPosition = getDemoUBoatWorldPosition(
+    payload,
+    { min: MAP_MIN, max: MAP_MAX },
+    DEMO_INITIAL_SUBMARINE_DISTANCE,
+  )
+  if (!demoWorldPosition) return false
+
+  submarine.root.position.x = demoWorldPosition.x
+  submarine.root.position.z = demoWorldPosition.z
+  submarineWorldX.value = demoWorldPosition.x
+  submarineWorldZ.value = demoWorldPosition.z
+  isDemoInitialPositionApplied = true
+  return true
 }
 
 async function pollRoomDetail() {
@@ -630,6 +661,7 @@ async function pollWorldSync(): Promise<boolean> {
   if (!roomId.value) return false
   try {
     const result: any = await getWorldSync(roomId.value)
+    applyDemoInitialPositionFromPayload(result)
     return await applyWorldSyncPayload(result)
   } catch (error) {
     console.warn('世界状态轮询失败。', error)
@@ -888,14 +920,10 @@ onMounted(async () => {
     oceanSize: OCEAN_SIZE,
     oceanSegments: OCEAN_SEGMENTS,
     sunDirection: SUN_DIRECTION,
-    renderer: engine.renderer,
-    scene: engine.scene,
-    camera: engine.camera,
+    waves: WAVE_SETTINGS,
   })
   engine.scene.add(ocean.mesh)
   engine.addUpdatable(ocean)
-  weather = new OceanWeatherController(engine, ocean)
-  engine.addUpdatable(weather)
 
   // 5. 加载模型（潜艇 + 太阳，并行）
   const loader = new GLTFLoader()
@@ -917,7 +945,8 @@ onMounted(async () => {
     engine.addSunModel(sunModel)
 
     const initialWorldPayload = await fetchWorldSyncPayload()
-    const initialUBoatSpawn = getInitialUBoatSpawn(initialWorldPayload)
+    const initialUBoatSpawn = getDemoInitialUBoatSpawn(initialWorldPayload)
+    isDemoInitialPositionApplied = initialUBoatSpawn.isDemoPositionApplied === true
 
     // 潜艇
     //用户操作的潜艇
@@ -987,7 +1016,6 @@ onMounted(async () => {
           if (countFButtonDown % 2 === 1) {
             submarine.currentDepth
 
-
             void (async () => {
               let playAudio = new PlayAudio('/assets/audio/AufSehrohrtiefegehen.wav', 2)
               await playAudio.play()
@@ -1013,23 +1041,13 @@ onMounted(async () => {
     oceanUpdatable.update = (delta: number) => {
       if (submarine) {
         oceanUpdatable.follow(submarine.root.position)
-        submarine.setSampledSurface(
-          oceanUpdatable.sampleSurfaceAt(submarine.root.position.x, submarine.root.position.z),
-        )
+        submarine.setSampledWaterHeight(oceanUpdatable.sampledWaterHeight)
         // 货船跟随波浪高度
         for (const ship of cargoShips) {
-          ship.updateSurface(
-            oceanUpdatable.sampleSurfaceAt(ship.root.position.x, ship.root.position.z),
-            delta,
-          )
+          ship.updateHeight(oceanUpdatable.sampledWaterHeight)
         }
         for (const remoteSubmarine of remoteSubmarines.values()) {
-          remoteSubmarine.setSampledSurface(
-            oceanUpdatable.sampleSurfaceAt(
-              remoteSubmarine.root.position.x,
-              remoteSubmarine.root.position.z,
-            ),
-          )
+          remoteSubmarine.setSampledWaterHeight(oceanUpdatable.sampledWaterHeight)
         }
       }
       originalOceanUpdate(delta)
@@ -1079,8 +1097,6 @@ onBeforeUnmount(() => {
     disposeObject(sunModel)
   }
   ocean?.dispose()
-  if (weather && engine) engine.removeUpdatable(weather)
-  weather?.dispose()
   input?.detach()
   engine?.dispose()
   entityRegistry?.clear()

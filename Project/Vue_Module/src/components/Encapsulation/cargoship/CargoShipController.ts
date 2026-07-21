@@ -25,6 +25,7 @@ import { findPropellerMeshes, updatePropellerRotation } from '../modules/propell
 import { MapCode } from '../../../common/map/mapcode'
 import { CARGO_MODEL_LENGTH_SCENE, CARGO_SURFACE_MODEL_OFFSET, METERS_TO_SCENE, SINK_DEPTH } from '../constant/sceneUnits'
 import { GameEntityRegistry } from '../entitymanager/GameEntityRegistry.ts'
+import type { OceanSurfaceSample } from '../ocean/OceanSimulation.ts'
 
 export interface CargoShipOptions {
   /** 唯一标识（用于碰撞、战役状态同步等） */
@@ -69,6 +70,8 @@ export class CargoShipController implements Updatable {
 
   private movementDelta = new THREE.Vector3()
   private readonly sinkPitch = THREE.MathUtils.degToRad(-45)
+  private wavePitch = 0
+  private waveRoll = 0
 
   // ==================== 静态异步工厂 ====================
 
@@ -227,6 +230,17 @@ export class CargoShipController implements Updatable {
   updateHeight(sampledWaterHeight: number): void {
     if (this.isDestroyed) return
     this.root.position.y = sampledWaterHeight
+    this.visual.rotation.x = THREE.MathUtils.damp(this.visual.rotation.x, 0, 1.8, 1 / 60)
+    this.visual.rotation.z = THREE.MathUtils.damp(this.visual.rotation.z, 0, 1.8, 1 / 60)
+  }
+
+  /** 跟随海面高度与法线姿态 */
+  updateSurface(sample: OceanSurfaceSample, delta: number): void {
+    if (this.isDestroyed) return
+    this.root.position.y = sample.height
+    this.updateWaveAttitudeFromNormal(sample.normal)
+    this.visual.rotation.z = THREE.MathUtils.damp(this.visual.rotation.z, this.wavePitch, 1.65, delta)
+    this.visual.rotation.x = THREE.MathUtils.damp(this.visual.rotation.x, this.waveRoll, 1.65, delta)
   }
 
   /** 标记被摧毁 */
@@ -263,6 +277,22 @@ export class CargoShipController implements Updatable {
       this.visual.rotation.z = this.sinkPitch
       this.isSink = true
     }
+  }
+
+  private updateWaveAttitudeFromNormal(normalInput: THREE.Vector3): void {
+    const normal = normalInput.clone().normalize()
+    const normalY = Math.max(normal.y, 0.2)
+    const gradientX = -normal.x / normalY
+    const gradientZ = -normal.z / normalY
+    const forwardX = Math.cos(this.heading)
+    const forwardZ = -Math.sin(this.heading)
+    const rightX = Math.sin(this.heading)
+    const rightZ = Math.cos(this.heading)
+    const slopeForward = gradientX * forwardX + gradientZ * forwardZ
+    const slopeRight = gradientX * rightX + gradientZ * rightZ
+    const maxSurfaceAngle = THREE.MathUtils.degToRad(10)
+    this.wavePitch = THREE.MathUtils.clamp(Math.atan(slopeForward), -maxSurfaceAngle, maxSurfaceAngle)
+    this.waveRoll = THREE.MathUtils.clamp(-Math.atan(slopeRight), -maxSurfaceAngle, maxSurfaceAngle)
   }
 
   handleCollision(_event: CollisionEvent, self: CollisionEntitySnapshot): void {

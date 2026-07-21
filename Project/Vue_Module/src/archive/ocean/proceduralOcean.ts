@@ -79,26 +79,8 @@ export function createProceduralOcean({
 
       void main() {
         vec4 worldBase = modelMatrix * vec4(position, 1.0);
-        float x = worldBase.x;
-        float z = worldBase.z;
-
-        float wave1 = sin(x * 0.075 + uTime * 0.85) * uPrimarySwell;
-        float wave2 = sin(z * 0.095 + uTime * 0.68) * uCrossSwell;
-        float wave3 = sin((x + z) * 0.14 + uTime * 1.1) * uMediumChoppyWaves;
-        float wave4 = sin(x * 0.32 - z * 0.27 + uTime * 1.8) * uLightRipples;
-        float height = wave1 + wave2 + wave3 + wave4;
-
-        float slopeX =
-          cos(x * 0.075 + uTime * 0.85) * uPrimarySwell * 0.075 +
-          cos((x + z) * 0.14 + uTime * 1.1) * uMediumChoppyWaves * 0.14 +
-          cos(x * 0.32 - z * 0.27 + uTime * 1.8) * uLightRipples * 0.32;
-        float slopeZ =
-          cos(z * 0.095 + uTime * 0.68) * uCrossSwell * 0.095 +
-          cos((x + z) * 0.14 + uTime * 1.1) * uMediumChoppyWaves * 0.14 -
-          cos(x * 0.32 - z * 0.27 + uTime * 1.8) * uLightRipples * 0.27;
-
-        vWorldPosition = vec3(x, worldBase.y + height, z);
-        vWorldNormal = normalize(vec3(-slopeX * 2.8, 1.0, -slopeZ * 2.8));
+        vWorldPosition = worldBase.xyz;
+        vWorldNormal = normalize(mat3(modelMatrix) * normal);
 
         vec4 mvPosition = viewMatrix * vec4(vWorldPosition, 1.0);
         gl_Position = projectionMatrix * mvPosition;

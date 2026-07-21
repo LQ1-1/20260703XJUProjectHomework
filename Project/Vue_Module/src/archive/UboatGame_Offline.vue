@@ -13,7 +13,6 @@ import {
 } from '../uboat/SubmarineController.ts'
 import { CargoShipController } from '../cargoship/CargoShipController.ts'
 import { OceanController } from '../ocean/OceanController.ts'
-import { OceanWeatherController } from '../ocean/OceanWeatherController.ts'
 import { tuneSunMaterials, disposeObject } from '../modules/modelUtils.ts'
 import { HitDetectSystem } from '../modules/hitdetect.ts'
 import UnderwaterStatusPanel from '../panel/UnderwaterStatusPanel.vue'
@@ -53,6 +52,13 @@ const OCEAN_SIZE = 1200
 const OCEAN_SEGMENTS = 256
 const SUN_OFFSET = new THREE.Vector3(-180, 115, -220)
 const SUN_DIRECTION = SUN_OFFSET.clone().normalize()
+
+const WAVE_SETTINGS = {
+  primarySwell: 0.88,
+  crossSwell: 0.64,
+  mediumChoppyWaves: 0.24,
+  lightRipples: 0.17,
+}
 
 const SURFACE_DEPTH_EPSILON_SCENE = 0.02
 const SCENE_TO_METERS = 77 / 22 // MODEL_LENGTH_METERS / MODEL_LENGTH_SCENE
@@ -130,7 +136,6 @@ let cameraCtrl: CameraController | undefined
 let submarine: SubmarineController | undefined
 let cargoShips: CargoShipController[] = []
 let ocean: OceanController | undefined
-let weather: OceanWeatherController | undefined
 let hitDetect: HitDetectSystem | undefined
 let sunModel: THREE.Object3D | undefined
 let hintTimer: ReturnType<typeof setTimeout> | undefined
@@ -525,14 +530,10 @@ onMounted(async () => {
     oceanSize: OCEAN_SIZE,
     oceanSegments: OCEAN_SEGMENTS,
     sunDirection: SUN_DIRECTION,
-    renderer: engine.renderer,
-    scene: engine.scene,
-    camera: engine.camera,
+    waves: WAVE_SETTINGS,
   })
   engine.scene.add(ocean.mesh)
   engine.addUpdatable(ocean)
-  weather = new OceanWeatherController(engine, ocean)
-  engine.addUpdatable(weather)
 
   // 5. 加载模型（潜艇 + 太阳，并行）
   const loader = new GLTFLoader()
@@ -636,15 +637,10 @@ onMounted(async () => {
     oceanUpdatable.update = (delta: number) => {
       if (submarine) {
         oceanUpdatable.follow(submarine.root.position)
-        submarine.setSampledSurface(
-          oceanUpdatable.sampleSurfaceAt(submarine.root.position.x, submarine.root.position.z),
-        )
+        submarine.setSampledWaterHeight(oceanUpdatable.sampledWaterHeight)
         // 货船跟随波浪高度
         for (const ship of cargoShips) {
-          ship.updateSurface(
-            oceanUpdatable.sampleSurfaceAt(ship.root.position.x, ship.root.position.z),
-            delta,
-          )
+          ship.updateHeight(oceanUpdatable.sampledWaterHeight)
         }
         scheduleNextConvoyIfNeeded()
       }
@@ -693,8 +689,6 @@ onBeforeUnmount(() => {
     disposeObject(sunModel)
   }
   ocean?.dispose()
-  if (weather && engine) engine.removeUpdatable(weather)
-  weather?.dispose()
   input?.detach()
   engine?.dispose()
   entityRegistry?.clear()
