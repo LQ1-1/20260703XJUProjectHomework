@@ -12,6 +12,7 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import {
   SURFACE_BACKGROUND,
+  SUBMERGED_BACKGROUND,
   DEEP_BACKGROUND,
 } from '../constant/sceneUnits'
 
@@ -60,6 +61,7 @@ export class GameEngine {
   private keyLightTarget!: THREE.Object3D
   private rimLight!: THREE.DirectionalLight
   private sunModel: THREE.Object3D | undefined
+  private backgroundDome!: THREE.Mesh<THREE.SphereGeometry, THREE.ShaderMaterial>
 
   private readonly sunOffset: THREE.Vector3
   private readonly sunModelScale: number
@@ -73,6 +75,8 @@ export class GameEngine {
     this.scene = new THREE.Scene()
     this.scene.background = opts.surfaceBackground.clone()
     this.scene.fog = new THREE.FogExp2(opts.surfaceBackground, 0.0008)
+    this.backgroundDome = this.createHorizonBackground(opts.surfaceBackground, SUBMERGED_BACKGROUND)
+    this.scene.add(this.backgroundDome)
 
     // 相机
     this.camera = new THREE.PerspectiveCamera(
@@ -154,6 +158,9 @@ export class GameEngine {
 
   /** 更新太阳和方向光的位置，使其始终围绕跟随目标 */
   updateSunAndLight(followTarget: THREE.Vector3): void {
+    this.backgroundDome.position.x = followTarget.x
+    this.backgroundDome.position.z = followTarget.z
+
     if (!this.hasSunModel) return
     const sunPosition = followTarget.clone().add(this.sunOffset)
     this.sunModel?.position.copy(sunPosition)
@@ -171,26 +178,26 @@ export class GameEngine {
     this.updatables.delete(updatable)
   }
 
-  /** 根据深度更新水下视觉效果（背景、雾、灯光） */
+  /** 根据深度更新水下视觉效果（雾、灯光）；背景由海平面穹顶固定分层。 */
   updateUnderwaterAppearance(
     depthSceneUnits: number,
     depthMeters: number,
     options: UnderwaterAppearanceOptions = {},
   ): void {
-    if (
-      !(this.scene.background instanceof THREE.Color) ||
-      !(this.scene.fog instanceof THREE.FogExp2)
-    ) {
+    if (!(this.scene.fog instanceof THREE.FogExp2)) {
       return
     }
 
     const surfaceBg = SURFACE_BACKGROUND
+    const submergedBg = SUBMERGED_BACKGROUND
     const deepBg = DEEP_BACKGROUND
-    const depthFactor = THREE.MathUtils.smoothstep(depthMeters, 5, 80)
+    const submergeFactor = THREE.MathUtils.smoothstep(depthMeters, 0.02, 3)
+    const depthFactor = THREE.MathUtils.smoothstep(depthMeters, 12, 80)
 
-    this.scene.background.lerpColors(surfaceBg, deepBg, depthFactor)
-    this.scene.fog.color.copy(this.scene.background)
-    const fogDensity = THREE.MathUtils.lerp(0.0008, 0.03, depthFactor)
+    this.scene.fog.color.lerpColors(surfaceBg, submergedBg, submergeFactor)
+    this.scene.fog.color.lerp(deepBg, depthFactor)
+    const submergedFogDensity = THREE.MathUtils.lerp(0.0008, 0.006, submergeFactor)
+    const fogDensity = THREE.MathUtils.lerp(submergedFogDensity, 0.03, depthFactor)
     this.scene.fog.density = fogDensity * (options.fogDensityMultiplier ?? 1)
     this.hemisphereLight.intensity = THREE.MathUtils.lerp(3.4, 0.22, depthFactor)
     this.keyLight.intensity = THREE.MathUtils.lerp(6.2, 0.28, depthFactor)
@@ -217,11 +224,59 @@ export class GameEngine {
     render()
   }
 
+  /**
+   * 以世界 Y=0 作为海平面，将天空和水下背景固定分开。
+   * 球体随玩家水平移动，始终位于相机远处，不会形成可见边缘。
+   */
+  private createHorizonBackground(
+    surfaceColor: THREE.Color,
+    submergedColor: THREE.Color,
+  ): THREE.Mesh<THREE.SphereGeometry, THREE.ShaderMaterial> {
+    const geometry = new THREE.SphereGeometry(1000, 32, 16)
+    const material = new THREE.ShaderMaterial({
+      side: THREE.BackSide,
+      depthWrite: false,
+      fog: false,
+      uniforms: {
+        uSurfaceColor: { value: surfaceColor.clone() },
+        uSubmergedColor: { value: submergedColor.clone() },
+      },
+      vertexShader: `
+        varying float vWorldY;
+
+        void main() {
+          vWorldY = (modelMatrix * vec4(position, 1.0)).y;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform vec3 uSurfaceColor;
+        uniform vec3 uSubmergedColor;
+
+        varying float vWorldY;
+
+        void main() {
+          float aboveSurface = smoothstep(-1.0, 1.0, vWorldY);
+          gl_FragColor = vec4(mix(uSubmergedColor, uSurfaceColor, aboveSurface), 1.0);
+
+          #include <tonemapping_fragment>
+          #include <colorspace_fragment>
+        }
+      `,
+    })
+    const dome = new THREE.Mesh(geometry, material)
+    dome.name = 'HorizonBackground'
+    dome.renderOrder = -100
+    return dome
+  }
+
   /** 彻底清理引擎，释放所有 GPU 资源 */
   dispose(): void {
     cancelAnimationFrame(this.animationFrame)
     this.resizeObserver?.disconnect()
     this.controls.dispose()
+    this.backgroundDome.geometry.dispose()
+    this.backgroundDome.material.dispose()
     this.renderer.dispose()
     this.renderer.domElement.remove()
   }

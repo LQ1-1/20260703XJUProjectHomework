@@ -1,8 +1,9 @@
 import axios from 'axios'
+import { getApiBaseUrl } from './runtimeConfig'
 
 
 const request = axios.create({
-    baseURL: import.meta.env.VITE_API_BASE ?? '/api',
+    baseURL: getApiBaseUrl(),
     timeout: 10000,
 })
 

@@ -40,6 +40,7 @@ import {
   type GameResultDTO,
   type SettlementDTO,
 } from '../api/ContactTool.ts'
+import { buildApiUrl } from '../api/runtimeConfig.ts'
 import {
   getCargoStateHeading,
   getCargoStateLocation,
@@ -761,7 +762,7 @@ async function leaveCurrentRoom() {
 function sendLeaveBeacon() {
   if (!roomId.value) return
   const body = new Blob([JSON.stringify({ RoomID: roomId.value })], { type: 'application/json' })
-  navigator.sendBeacon?.('/api/room/leave', body)
+  navigator.sendBeacon?.(buildApiUrl('/room/leave'), body)
 }
 
 

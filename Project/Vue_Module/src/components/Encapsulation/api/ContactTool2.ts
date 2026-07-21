@@ -1,4 +1,5 @@
 import request from './request'
+import { getWsBaseUrl } from './runtimeConfig'
 import type {
   GameResultDTO,
   HitReportDTO,
@@ -182,8 +183,8 @@ export async function createRoomSocket(options: RoomSocketOptions): Promise<Room
 }
 
 function buildRoomSocketUrl(ticket: string): string {
-  const base = import.meta.env.VITE_WS_BASE
-  if (base) return `${String(base).replace(/\/$/, '')}/ws/room?ticket=${encodeURIComponent(ticket)}`
+  const base = getWsBaseUrl()
+  if (base) return `${base}/ws/room?ticket=${encodeURIComponent(ticket)}`
 
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
   return `${protocol}//${window.location.host}/ws/room?ticket=${encodeURIComponent(ticket)}`

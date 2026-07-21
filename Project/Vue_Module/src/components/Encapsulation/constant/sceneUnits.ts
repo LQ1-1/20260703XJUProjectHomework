@@ -68,6 +68,9 @@ export const SURFACE_MODEL_OFFSET = -0.01
 
 export const SURFACE_BACKGROUND = new THREE.Color(0x6fb9e8)
 
+/** 潜艇刚没入水面后的近水下背景色，保留可见度但明显区别于天空。 */
+export const SUBMERGED_BACKGROUND = new THREE.Color(0x0d4058)
+
 export const DEEP_BACKGROUND = new THREE.Color(0x00070d)
 
 //测距公式：（真实船高/垂直密位读数）x 测距系数

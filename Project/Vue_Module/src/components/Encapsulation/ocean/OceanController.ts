@@ -64,6 +64,9 @@ export class OceanController implements Updatable {
   dispose(): void {
     this.mesh.removeFromParent()
     this.mesh.geometry.dispose()
+    const { uFoamMask, uFoamNormal } = this.mesh.material.uniforms
+    ;(uFoamMask?.value as THREE.Texture | undefined)?.dispose()
+    ;(uFoamNormal?.value as THREE.Texture | undefined)?.dispose()
     this.mesh.material.dispose()
   }
 }
